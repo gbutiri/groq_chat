@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, request, render_template, render_template_string
 import requests
 from groq import Groq # type: ignore
 import json
@@ -34,7 +34,7 @@ def get_tools():
             "type": "function",
             "function": {
                 "name": "testing_uni",
-                "description": "Whenever the user calls for a magic number.",
+                "description": "Whenever the user calls for a magic number, return an calculated answer back.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -44,6 +44,64 @@ def get_tools():
                         }
                     },
                     "required": ["number_in"],
+                
+                },
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_whole_function_from_file",
+                "description": "Whenever the user asks you to view the functions inside a python file, call this function. The file path is passed as a parameter.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "the path of the file from the root: `/file_name.py` or `/folder/file_name.py`. The path is cleaned up in the function.",
+                        },
+                        "function_name": {
+                            "type": "string",
+                            "description": "the function name we'll be seeking in the file from the root: `/file_name.py` or `/folder/file_name.py`.",
+                        }
+                    },
+                    "required": ["file_path"],
+
+                }
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_function_names_from_file",
+                "description": "Whenever the user asks you to view the functions inside a python file, call this function. The file path is passed as a parameter.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "the path of the file from the root: `/file_name.py` or `/folder/file_name.py`. The path is cleaned up in the function.",
+                        }
+                    },
+                    "required": ["file_path"],
+                
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "file_view",
+                "description": "Whenever the user asks you to view the contents of a file to understand it, call this function. The file path is passed as a parameter.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "the path of the file from the root: `/file_name.py` or `/folder/file_name.py`. The path is cleaned up in the function.",
+                        }
+                    },
+                    "required": ["file_path"],
                 
                 },
             },
@@ -61,6 +119,14 @@ def get_tools():
             "function": {
                 "name": "weather_get",
                 "description": "Each time the user asks for the weather, this function is called. Call this function and get the realtime weather from current location, Cleveland, OH. The reponse is always in Fahrenheit (and Celsius in parentesis).",
+                "parameters": {},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "git_update",
+                "description": "Each time the user asks for a git update, this function is called. Call this function and get the latest updates from the git repository. Just let the user know that it worked. No parameters are necessary.",
                 "parameters": {},
             },
         },
@@ -106,6 +172,161 @@ def weather_get():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+def project_root_get():
+    return "/var/www/groq_chat"
+
+
+def clean_path(path):
+    return path.lstrip('/').replace(project_root_get(), '').lstrip('/')
+
+
+def get_function_names_from_file(file_path):
+    file_path = clean_path(file_path)
+    base_directory = project_root_get()
+    full_path = os.path.join(base_directory, file_path)
+
+    # Check for unauthorized access
+    if not os.path.commonpath([full_path, base_directory]) == base_directory:
+        print("DEBUG: Unauthorized path detected")  # Debug print
+        return "Access denied: Unauthorized path.", 403
+
+    try:
+        # Verify if the path is a file
+        if os.path.isfile(full_path):
+            with open(full_path, 'r') as file:
+                lines = file.readlines()
+
+            # Prepare the content for rendering
+            output_lines = []
+            for index, line in enumerate(lines):
+                if line.strip().startswith("def ") or line.strip().startswith("# Protocol:"):
+                    leading_spaces = ' ' * (len(str(len(lines))) - len(str(index + 1)))  # Calculate leading spaces
+                    output_lines.append(f"{leading_spaces}{index + 1}: {line}")
+
+            # Template string for the HTML response
+            html_template = """{{ content }}"""
+            content = "".join(output_lines)
+            return jsonify({"function_in_file": render_template_string(html_template, content=content)})
+
+        else:
+            print("DEBUG: The specified path is not a file.")  # Debug print
+            return "The specified path is not a file.", 400
+
+    except FileNotFoundError:
+        print("DEBUG: FileNotFoundError")  # Debug print
+        return "The specified file does not exist.", 404
+    except PermissionError:
+        print("DEBUG: PermissionError")  # Debug print
+        return "Permission denied: Unable to access the file.", 403
+    except Exception as err:
+        print(f"DEBUG: Exception occurred: {err}")  # Debug print
+        return str(err), 500
+
+
+def get_whole_function_from_file(file_path, function_name):
+
+    file_path = clean_path(file_path)
+    base_directory = project_root_get()
+    full_path = os.path.join(base_directory, file_path)
+
+    # Check for unauthorized access
+    if not os.path.commonpath([full_path, base_directory]) == base_directory:
+        print("DEBUG: Unauthorized path detected")  # Debug print
+        return "Access denied: Unauthorized path.", 403
+
+    try:
+        # Verify if the path is a file
+        if os.path.isfile(full_path):
+            with open(full_path, 'r') as file:
+                lines = file.readlines()
+
+            # Prepare the content for rendering
+            output_lines = []
+            function_found = False
+            indentation_level = None
+
+            for index, line in enumerate(lines):
+                stripped_line = line.strip()
+
+                # Check if the line starts with the function definition
+                if stripped_line.startswith(f"def {function_name}"):
+                    # No comments.
+                    if not stripped_line.startswith("#"):
+                        function_found = True
+                        indentation_level = len(line) - len(line.lstrip())
+                        output_lines.append(f"{index + 1}: {line}")
+
+                # If the function has been found, continue to capture its body
+                elif function_found:
+                    current_indentation = len(line) - len(line.lstrip())
+
+                    # Stop capturing if we encounter a line with 0 indentation, but only if the line is not empty
+                    if current_indentation == 0 and stripped_line != '':
+                        break
+
+                    output_lines.append(f"{index + 1}: {line}")
+
+            # Template string for the HTML response
+            html_template = """{{ content }}"""
+            content = "".join(output_lines)
+            return jsonify({"function_in_file": render_template_string(html_template, content=content)})
+
+        else:
+            print("DEBUG: The specified path is not a file.")  # Debug print
+            return "The specified path is not a file.", 400
+
+    except FileNotFoundError:
+        print("DEBUG: FileNotFoundError")  # Debug print
+        return "The specified file does not exist.", 404
+    except PermissionError:
+        print("DEBUG: PermissionError")  # Debug print
+        return "Permission denied: Unable to access the file.", 403
+    except Exception as err:
+        print(f"DEBUG: Exception occurred: {err}")  # Debug print
+        return str(err), 500
+
+def file_view(file_path):
+    file_path = clean_path(file_path)
+    base_directory = project_root_get()
+    full_path = os.path.join(base_directory, file_path)
+
+    # Check for unauthorized access
+    if not os.path.commonpath([full_path, base_directory]) == base_directory:
+        print("DEBUG: Unauthorized path detected")  # Debug print
+        return "Access denied: Unauthorized path.", 403
+
+    try:
+        # Verify if the path is a file
+        if os.path.isfile(full_path):
+            with open(full_path, 'r') as file:
+                lines = file.readlines()
+
+            # Prepare the content for rendering
+            output_lines = []
+            for index, line in enumerate(lines):
+                leading_spaces = ' ' * (len(str(len(lines))) - len(str(index + 1)))  # Calculate leading spaces
+                output_lines.append(f"{leading_spaces}{index + 1}: {line}")
+
+            # Template string for the HTML response
+            html_template = """{{ content }}"""
+            content = "".join(output_lines)
+            return jsonify({"file_contents": render_template_string(html_template, content=content)})
+
+        else:
+            print("DEBUG: The specified path is not a file.")  # Debug print
+            return "The specified path is not a file.", 400
+
+    except FileNotFoundError:
+        print("DEBUG: FileNotFoundError")  # Debug print
+        return "The specified file does not exist.", 404
+    except PermissionError:
+        print("DEBUG: PermissionError")  # Debug print
+        return "Permission denied: Unable to access the file.", 403
+    except Exception as err:
+        print(f"DEBUG: Exception occurred: {err}")  # Debug print
+        return str(err), 500
 
 
 ####################  ROUTES  ####################
@@ -177,6 +398,10 @@ def chat_completion(messages):
                 "tell_time": tell_time,
                 "weather_get": weather_get,
                 "testing_uni": testing_uni,
+                "git_update": git_update,
+                "file_view": file_view,
+                "get_function_names_from_file": get_function_names_from_file,
+                "get_whole_function_from_file": get_whole_function_from_file,
             }
             # Add the LLM's response to the conversation
             messages.append({
@@ -204,17 +429,24 @@ def chat_completion(messages):
                     function_response = function_to_call(**function_args)
                 else:
                     function_response = function_to_call()
+                print("-- DEBUG: function_response: ", function_response)
+                
+                # Test to see if the function response is a response object.
+                if hasattr(function_response, 'get_data') and callable(function_response.get_data):
+                    print("-- DEBUG: function_response: ", function_response.get_data(as_text=True))
+                    func_response_text = function_response.get_data(as_text=True)
+                else:
+                    # Test to see if it's just a string. If not force it.
+                    func_response_text = str(function_response)
 
-                func_response_text = function_response.get_data(as_text=True)
-
-                print("-- DEBUG: function_response: ", function_response.get_data(as_text=True))
+                print("-- DEBUG: func_response_text: ", func_response_text)
 
                 # Add the tool response to the conversation
                 tool_messages = [{
                     "tool_call_id": tool_call.id, 
                     "role": "tool", # Indicates this message is from tool use
                     "name": function_name,
-                    "content": f"Reply with the time and date format only from this: {func_response_text}",
+                    "content": f"Data that came back. Interpret it \n\n{func_response_text}.",
                 }]
 
             # Insert this as a message into the groq_messages table
@@ -367,6 +599,7 @@ def summarize_conversation(conv_id = 0):
     )
     completion = client.chat.completions.create(
         model="llama3-8b-8192",
+        # model="llama3-70b-8192",
         messages=messages
     )
 
@@ -384,7 +617,9 @@ def summarize_conversation(conv_id = 0):
 
 
 
-    return jsonify({"vbox": "Success! The conversation has been summarized."})
+    return jsonify({
+        "redirect": "/show-chat-screen",
+    })
 
 
 @app.route("/show-chat-screen", methods=["GET"])
@@ -430,6 +665,41 @@ def get_token_count(content):
     tokens = enc.encode(dict_str, disallowed_special=disallowed_special)
     token_count = len(tokens)
     return token_count
+
+
+def git_update():
+    try:
+        os.system("git pull origin main")
+        return jsonify({"vbox": "Success! The function has been updated."})
+    
+    except Exception as e:
+        return jsonify({"vbox": f"Error: {str(e)}"})
+
+
+
+@app.route("/see_memory/<conv_id>", methods=["POST"])
+def see_memory(conv_id):
+
+    ny_tz = pytz.timezone('America/New_York')
+
+    conv_data = sql("""SELECT * FROM groq_conversations
+        WHERE conv_id = %s;""", (conv_id, ))
+    
+    utc_time = str(conv_data[0]['conv_first_msg'])
+    utc_dt = datetime.strptime(utc_time, '%Y-%m-%d %H:%M:%S')
+    ny_dt = utc_dt.replace(tzinfo=pytz.utc).astimezone(ny_tz)
+
+    conv_data[0]['conv_first_msg'] = ny_dt.strftime('%a, %b %d, \'%y, %I:%M %p').replace(' 0', ' ').replace('AM', 'am').replace('PM', 'pm')
+    conv_data[0]['conv_summary'] = conv_data[0]['conv_summary'].replace("\n", "<br />")
+
+    window_output = render_template("memory.html", memory=conv_data[0])
+
+    return jsonify({"vbox": window_output})
+
+
+@app.template_filter('linebreaksbr')
+def linebreaksbr(text):
+    return text.replace("\n", "<br />")
 
 
 def main():

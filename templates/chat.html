@@ -22,13 +22,23 @@
             <div class="col-3">
                 
                 <h1 class="h3">GROQ Chat</h1>
-                <div class="memories">
-                    <h2 class="h4">Memories</h2>
+                <h2 class="h4">
+                    <!--<a href="#" id="menu_toggle" class="btn btn-secondary small"><i class="fal fa-bars"></i></a>-->
+                    Memories
+                </h2>
+                <div class="memories" id="memories">
                     <ul id="memories_list">
                         {% for memory in memories %}
-                            <li class="py-1">
-                                <div>{{ memory['conv_first_msg'] }}</div>
-                                <div class="badge rounded-pill text-bg-primary" style="background-color: {{ memory['conv_type_color'] }};">{{ memory['conv_type_name'] }}</div>
+                            <li class="pt-2 pb-1">
+                                <div class="memory_title">
+                                    <a href="#" style="color: {{ memory['conv_type_color'] }} !important;" class="tmbtn memory-summary" data-module="see_memory" data-action="{{ memory['conv_id'] }}">{{ memory['conv_title'] }}
+                                        <span class="badge rounded-pill text-bg-primary" style="background-color: {{ memory['conv_type_color'] }} !important;">
+                                            {{ memory['conv_type_name'][:1] }}
+                                        </span>
+                                        {{ memory['conv_first_msg'] }}
+                                    </a>
+                                </div>
+                                
                             </li>
                         {% endfor %}
                     </ul>
@@ -70,6 +80,10 @@
 
             autosize($("textarea.autosize"));
             scrollToTheTop();
+
+            $("#menu_toggle").click(function(){
+                $("#memories").slideLeft();
+            });
         });
     </script>
 
