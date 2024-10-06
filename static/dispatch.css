@@ -1,0 +1,151 @@
+#loading-circle,.fuzz{
+	right:0;
+	bottom:0;
+	left:0
+}
+.main-header{
+	z-index:1031
+}
+#loading-circle{
+	z-index:1032;
+	position:fixed;
+	top:0;
+	background-color:transparent;
+	text-align:center;
+	display:block;
+	opacity:1;
+	animation:fadeup .4s;
+	-webkit-animation:fadeup .3s;
+	-moz-animation:fadeup .3s;
+	-o-animation:fadeup .3s
+}
+#loading-circle .fal,.loading-circle-message{
+	background:rgba(0,0,0,.7);
+	color:#fff;
+	padding:5px;
+	box-shadow:0 0 50px #000
+}
+@keyframes fadeup{
+	0%,33%{
+		opacity:0
+}
+	100%{
+		opacity:1
+}
+}
+@-webkit-keyframes fadeup{
+	0%,33%{
+		opacity:0
+}
+	100%{
+		opacity:1
+}
+}
+@-moz-keyframes fadeup{
+	0%,33%{
+		opacity:0
+}
+	100%{
+		opacity:1
+}
+}
+@-o-keyframes fadeup{
+	0%,33%{
+		opacity:0
+}
+	100%{
+		opacity:1
+}
+}
+.loading-circle-message-wrapper{
+	position:absolute;
+	top:50%;
+	margin-top:80px;
+	text-align:center;
+	left:0;
+	right:0
+}
+.loading-circle-message{
+	display:inline-block;
+	border-radius:10px
+}
+#loading-circle .fal{
+	font-weight: lighter;
+	height:50px;
+	width:50px;
+	top:50%;
+	margin-top:-25px;
+	position:absolute;
+	font-size:40px;
+	margin-left:-25px;
+	border-radius:100%
+}
+.fuzz{
+	position:fixed;
+	background:rgba(0,0,0,.5);
+	top:0;
+	z-index:1031;
+	opacity:0;
+	overflow:auto
+}
+.fuzz .vbox-table{
+	height:100%;
+	margin:auto
+}
+.fuzz .vbox{
+	background-color:#fff;
+	padding:20px;
+	position:relative;
+	color:#333;
+	box-shadow:0 5px 15px rgba(0,0,0,.5);
+	border:1px solid rgba(0,0,0,.2);
+	border-radius:6px;
+	outline:0;
+	top:-50px;
+	transition:all .1s ease-out;
+}
+.fuzz .vbox.visible{
+	top:0
+}
+.fuzz .vbox-content{
+	color:#333;
+	min-width:250px;
+	min-height:150px
+}
+.fuzz .vbox-content h4{
+	margin:0;
+	line-height:1.42857143
+}
+.fuzz .vbox-close{
+	position: absolute;
+    text-decoration: none;
+    right: 10px;
+    top: 5px;
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 37px;
+    color: #000;
+    text-shadow: 0 1px 0 #fff;
+    opacity: .2;
+    height: 34px;
+    display: block;
+    width: 34px;
+    text-align: center;
+}
+
+.fuzz .vbox-close:hover{
+	opacity:.5
+}
+.err{
+	font-size:12px;
+	line-height:12px;
+	height:12px;
+}
+
+.vbox-content .popup-header {
+	margin: -20px -20px 0px -20px;
+	padding: 20px;
+	background-color: #eee;
+	border-bottom: 1px solid #ccc;
+	border-radius: 3px 3px 0 0;
+}

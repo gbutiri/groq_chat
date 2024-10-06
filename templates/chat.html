@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Window</title>
+    <!--<link rel="stylesheet" href="/static/bootstrap-5.3.2/css/bootstrap.min.css" />-->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="/static/fontawesome-pro-5.15.4/css/all.min.css" />
+    <script src="static/jquery-3.7.1/jquery-3.7.1.min.js"></script>
+    <script src="static/autosize.min.js"></script>
+    <script src="static/dispatch.js"></script>
+    <link rel="stylesheet" href="static/dispatch.css">
+    <link rel="stylesheet" href="static/main.css">
+    <style>
+    </style>
+</head>
+<body>
+    <div class="container ">
+
+        <div class="row">
+            <div class="col-3">
+                
+                <h1 class="h3">GROQ Chat</h1>
+                <div class="memories">
+                    <h2 class="h4">Memories</h2>
+                    <ul id="memories_list">
+                        {% for memory in memories %}
+                            <li class="py-1">
+                                <div>{{ memory['conv_first_msg'] }}</div>
+                                <div class="badge rounded-pill text-bg-primary" style="background-color: {{ memory['conv_type_color'] }};">{{ memory['conv_type_name'] }}</div>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                
+            </div>
+            <div class="col-9">
+                <div class="chat-window">
+                    <div class="message-history" id="message-history">
+                        {% include 'messages.html' %}
+                    </div>
+                    
+                    <div class="new-message">
+                        <div>
+                            tokens: <span id="token_count">{{ total_tokens }}</span>
+                            <a href="#" class="tmbtn" data-module="summarize_conversation" data-action="">summarize</a>
+                        </div>
+                        <form class="ajaxform" data-module="send_groq_chat" data-action="">
+                            <div class="input-group">
+                                <textarea class="autosize form-control" name="message" id="message" placeholder="Type your message here..."></textarea>
+                                
+                                <button class="btn btn-primary" type="submit">Send</button>
+                                
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+                    
+    </div>
+    <script type="text/javascript">
+        function scrollToTheTop() {
+            $("#message-history").animate({
+                scrollTop: $(document).find('#message-history').get(0).scrollHeight
+            }, 500);
+        }
+        $(document).ready(function(){
+
+            autosize($("textarea.autosize"));
+            scrollToTheTop();
+        });
+    </script>
+
+</body>
+</html>

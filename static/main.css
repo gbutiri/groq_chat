@@ -1,0 +1,60 @@
+.chat-window {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+.message-history {
+    flex: 1;
+    overflow-y: auto;
+    margin-top: 10px;
+    border-bottom: 1px solid #ccc;
+}
+.new-message {
+    padding: 3px 0px 10px;
+}
+
+.message {
+    border-radius: 5px;
+    padding: 3px;
+    border: 1px solid #ccc;
+    font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+    
+}
+.message.assistant .content {
+    background: linear-gradient(to bottom, #fff0d3, #ffe4b5);
+    padding: 3px;
+    
+}
+.message div strong {
+    display: block;
+}
+.timestamp {
+    font-size: 0.7em;
+    text-align: right;
+    color: #666;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+#token_count {
+    font-size: 0.85em;
+    font-weight: bold;
+    color: #666;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.remove-link {
+    color: #600;
+    font-size: 0.7em;
+    cursor: pointer;
+}
+
+#memories_list {
+    margin: 0;
+    padding: 0;
+    list-style-type: none; 
+}
+#memories_list li {
+    margin: 0;
+    padding: 0;
+    border-bottom: 1px solid #ccc;
+}

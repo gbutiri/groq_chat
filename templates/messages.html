@@ -1,0 +1,6 @@
+{% for message in messages %}
+    <div class="message mb-3 {{ message['msg_role'] }}"><a href="#" class="remove-link tmbtn" data-module="remove_message" data-action="{{ message['msg_id'] }}">remove</a></small>
+        <div class="content"><strong>{{ message['msg_role'] }}:</strong> {{ message['msg_content'] }}</div>
+        <div class="timestamp">{{ message['msg_created'] }}</div>
+    </div>
+{% endfor %}
