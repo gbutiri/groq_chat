@@ -1,0 +1,6 @@
+<select class="form-control" id="tool_type_id" name="tool_type_id">
+    {% for tool_type in tool_types %}
+        <option value="{{ tool_type['tool_type_id'] }}" >{{ tool_type['tool_type_name'] }}</option>
+    {% endfor %}
+</select>
+<div class="err" id="err_tool_type"></div>

@@ -1,3 +1,9 @@
+
+.btn.btn-block {
+    display: block !important;
+    width: 100% !important;
+}
+
 .chat-window {
     height: 100vh;
     display: flex;
@@ -47,16 +53,19 @@
     font-size: 0.7em;
     cursor: pointer;
 }
-
-#memories_list {
+ul, li {
     margin: 0;
     padding: 0;
     list-style-type: none; 
 }
 #memories_list li {
-    margin: 0;
-    padding: 0;
     border-bottom: 1px solid #eee;
+}
+
+#tools_list li .tool_list_wrapper {
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 10px;
 }
 .memory_title {
     font-size: 0.9em;
@@ -67,4 +76,13 @@
 }
 .memory-summary {
     text-decoration: none;
+}
+
+.tool_param {
+    border: 1px solid #eee;
+    border-radius: 3px;
+    padding: 5px;
+}
+.tool_name {
+    border-bottom: 1px solid #ccc;
 }

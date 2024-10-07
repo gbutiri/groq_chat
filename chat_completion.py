@@ -28,7 +28,231 @@ def testing_uni(number_in):
 #################### TOOL FUNCTIONS ####################
 
 
+@app.route("/see-tools-page", methods=["GET"])
+def see_tools_page():
+    tools = sql("""SELECT * FROM groq_tools 
+                LEFT JOIN groq_tool_types USING(tool_type_id) 
+                ORDER BY tool_id;""")
+    
+    for tool in tools:
+
+        tool['parameters'] = sql("""SELECT * FROM groq_tool_parameters WHERE tool_id = %s;""", (tool['tool_id'], ))
+    
+    return render_template("tools.html", tools=tools)
+
+
+@app.route("/see-tool/<tool_id>", methods=["GET"])
+def see_tool(tool_id):
+    tool = sql("""SELECT * FROM groq_tools 
+                LEFT JOIN groq_tool_types USING(tool_type_id) 
+                WHERE tool_id = %s;""", (tool_id, ))
+
+    tool_types = sql("""SELECT * FROM groq_tool_types;""")
+    tool_params = sql("""SELECT * FROM groq_tool_parameters WHERE tool_id = %s;""", (tool_id, ))
+
+    return render_template("tool.html", tool=tool[0], tool_types=tool_types, tool_params=tool_params)
+
+
+@app.route("/show-new-tool-type-page", methods=["POST"])
+def show_new_tool_type_page():
+    tool_types = sql("""SELECT * FROM groq_tool_types;""")
+
+    return jsonify({
+        "vbox": render_template("new-tool-type.html", tool_types=tool_types)
+    })
+
+
+@app.route("/show-new-parameter-page/<tool_id>", methods=["POST"])
+def show_new_parameter_page(tool_id):
+
+    return jsonify({
+        "vbox": render_template("new-parameter.html", tool_id=tool_id)
+    })
+
+
+@app.route("/add-tool-type", methods=["POST"])
+def add_tool_type():
+    tool_type_name = request.form["tool_type_name"]
+    tool_type_descr = request.form["tool_type_descr"]
+
+    errors = {}
+
+    if tool_type_name.strip() == "":
+        errors["#err_tool_type_name"] = "Name field is required."
+
+    if tool_type_name.strip() == "":
+        errors["#tool_type_descr"] = "Description field is required."
+
+    if errors:
+        return jsonify({
+            "htmls": errors
+        })
+
+    # Error check is done. Now we can insert the tool type into the database.
+    sql("""INSERT INTO groq_tool_types (tool_type_name, tool_type_descr)
+        VALUES (%s, %s);""", (tool_type_name, tool_type_descr, ))
+
+    all_tool_types = sql("""SELECT * FROM groq_tool_types;""")
+
+    html_out = render_template("tool_type_select.html", tool_types=all_tool_types)
+
+    return jsonify({
+        "htmls": {
+            "#tool-type-list": html_out,
+        },
+        "vboxclose": True,
+    })
+
+
+@app.route("/add-tool-parameter/<tool_id>", methods=["POST"])
+def add_tool_parameter(tool_id):
+
+    tool_param_name = request.form["param_name"]
+    tool_param_type = request.form["param_type"]
+    tool_param_descr = request.form["param_descr"]
+
+    errors = {}
+
+    if tool_param_name.strip() == "":
+        errors["#err_param_name"] = "Name field is required."
+
+    if tool_param_type.strip() == "":
+        errors["#err_param_type"] = "Type field is required."
+
+    if tool_param_descr.strip() == "":
+        errors["#err_param_descr"] = "Description field is required."
+
+    if errors:
+        return jsonify({
+            "htmls": errors
+        })
+
+    # Error check is done. Now we can insert the tool parameter into the database.
+    sql("""INSERT INTO groq_tool_parameters (tool_id, tool_param_name, tool_param_type, tool_param_descr)
+        VALUES (%s, %s, %s, %s);""", (tool_id, tool_param_name, tool_param_type, tool_param_descr, ))
+
+    all_tool_params = sql("""SELECT * FROM groq_tool_parameters WHERE tool_id = %s;""", (tool_id, ))
+
+    html_out = render_template("tool_param_list.html", tool_params=all_tool_params)
+
+    return jsonify({
+        "htmls": {
+            "#tool_parameter": html_out,
+        },
+        "vboxclose": True,
+    })
+
+
+@app.route("/add-groq-tool", methods=["POST"])
+def add_groq_tool():
+    tool_name = request.form["tool_name"]
+    tool_descr = request.form["tool_descr"]
+
+    errors = {}
+
+    if tool_name.strip() == "":
+        errors["#err_tool_name"] = "Name field is required."
+
+    if tool_descr.strip() == "":
+        errors["#err_tool_descr"] = "Description field is required."
+
+    if errors:
+        return jsonify({
+            "htmls": errors
+        })
+
+    # Error check is done. Now we can insert the tool into the database.
+    sql("""INSERT INTO groq_tools (tool_name, tool_descr)
+        VALUES (%s, %s);""", (tool_name, tool_descr, ))
+
+    new_tools = sql("""SELECT * FROM groq_tools;""")
+
+    html_out = render_template("tool-list.html", tools=new_tools)
+
+    return jsonify({
+        "htmls": {
+            "#tools_list": html_out,
+        }
+    })
+
+
+@app.route('/update-groq-tool/<tool_id>', methods=["POST"])
+def update_groq_tool(tool_id):
+    
+    tool_name = request.form["tool_name"]
+    tool_descr = request.form["tool_descr"]
+    tool_type_id = request.form["tool_type_id"]
+
+    errors = {}
+
+    if tool_name.strip() == "":
+        errors["#err_tool_name"] = "Name field is required."
+
+    if tool_descr.strip() == "":
+        errors["#err_tool_descr"] = "Description field is required."
+
+    if tool_type_id == '':
+        errors["#err_tool_type_id"] = "Tool type is required."
+
+    if errors:
+        return jsonify({
+            "htmls": errors
+        })
+
+    # Error check is done. Now we can update the tool in the database.
+    sql("""UPDATE groq_tools SET tool_name = %s, tool_descr = %s WHERE tool_id = %s;""", (tool_name, tool_descr, tool_id, ))
+
+    
+    return jsonify({
+        "vbox": "Tool updated successfully."
+    })
+
+
+# This function is to mimic the list returned inside the get_tools() function.
 def get_tools():
+
+    tools = sql("""SELECT * FROM groq_tools;""")
+    tool_list = []
+    
+    
+    for tool in tools:
+        tool_json_item = {}
+        tool_json_item['type'] = "function"
+        tool_json_item['function'] = {
+            "name": tool['tool_name'],
+            "description": tool['tool_descr'],
+        }
+
+        tool_params = sql("""SELECT * FROM groq_tool_parameters WHERE tool_id = %s;""", (tool['tool_id'], ))
+
+        tool_params_json = {}
+        properties = {}
+        required = []
+        
+        for param in tool_params:
+
+            properties[param['tool_param_name']] = {
+                "type": param['tool_param_type'],
+                "description": param['tool_param_descr'],
+            }
+            
+            if param['tool_param_is_req']:
+                required.append(param['tool_param_name'])
+
+            # print("properties", properties)
+
+        tool_params_json["properties"] = properties
+        tool_params_json["required"] = required
+        tool_params_json["type"] = "object"
+
+        
+        tool_json_item['function']['parameters'] = tool_params_json
+        tool_list.append(tool_json_item)
+
+    print("tool_list: ", tool_list)
+
+    return tool_list
+
     return [
         {
             "type": "function",
@@ -58,14 +282,14 @@ def get_tools():
                     "properties": {
                         "file_path": {
                             "type": "string",
-                            "description": "the path of the file from the root: `/file_name.py` or `/folder/file_name.py`. The path is cleaned up in the function.",
+                            "description": "The path of the file from the root: `/file_name.py` or `/folder/file_name.py`. The path is cleaned up in the function.",
                         },
                         "function_name": {
                             "type": "string",
-                            "description": "the function name we'll be seeking in the file from the root: `/file_name.py` or `/folder/file_name.py`.",
+                            "description": "The function name we'll be seeking in the file from the root: `/file_name.py` or `/folder/file_name.py`.",
                         }
                     },
-                    "required": ["file_path"],
+                    "required": ["file_path", "function_name"],
 
                 }
             },
@@ -80,7 +304,7 @@ def get_tools():
                     "properties": {
                         "file_path": {
                             "type": "string",
-                            "description": "the path of the file from the root: `/file_name.py` or `/folder/file_name.py`. The path is cleaned up in the function.",
+                            "description": "The path of the file from the root: `/file_name.py` or `/folder/file_name.py`. The path is cleaned up in the function.",
                         }
                     },
                     "required": ["file_path"],
@@ -98,7 +322,7 @@ def get_tools():
                     "properties": {
                         "file_path": {
                             "type": "string",
-                            "description": "the path of the file from the root: `/file_name.py` or `/folder/file_name.py`. The path is cleaned up in the function.",
+                            "description": "The path of the file from the root: `/file_name.py` or `/folder/file_name.py`. The path is cleaned up in the function.",
                         }
                     },
                     "required": ["file_path"],
@@ -366,13 +590,14 @@ def remove_message(msg_id):
 
 
 def chat_completion(messages):
-    print(os.environ.get("GROQ_API_KEY"))
+    # print(os.environ.get("GROQ_API_KEY"))
     client = Groq(
         api_key=os.environ.get("GROQ_API_KEY"),
     )
 
     try:
 
+        
         tools = get_tools()
 
         completion = client.chat.completions.create(
@@ -394,21 +619,14 @@ def chat_completion(messages):
 
         if tool_calls:
             # Define the available tools that can be called by the LLM
-            available_functions = {
-                "tell_time": tell_time,
-                "weather_get": weather_get,
-                "testing_uni": testing_uni,
-                "git_update": git_update,
-                "file_view": file_view,
-                "get_function_names_from_file": get_function_names_from_file,
-                "get_whole_function_from_file": get_whole_function_from_file,
-            }
-            # Add the LLM's response to the conversation
-            messages.append({
-                "role": "tool",
-                "content": "Called the tell_time() function.",
-            })
-            
+
+            functions = sql("""SELECT * FROM groq_tools;""")
+
+            available_functions = {}
+
+            for func in functions:
+                available_functions[func['tool_name']] = func['tool_name']
+
             # Process each tool call
             for tool_call in tool_calls:
 
@@ -616,7 +834,7 @@ def summarize_conversation(conv_id = 0):
     sql("""UPDATE groq_messages SET conv_id = %s WHERE conv_id = 0;""", (new_conv_id, ))
 
 
-
+    return "Conversation summarized."
     return jsonify({
         "redirect": "/show-chat-screen",
     })
@@ -632,7 +850,7 @@ def show_chat_screen():
 
     # Make sure we select the time values in America/New_York timezone.
     # Fetch memories from the database
-    memories = sql("""SELECT *, conv_first_msg FROM groq_conversations 
+    memories = sql("""SELECT * FROM groq_conversations 
         LEFT JOIN groq_conv_types USING(conv_type_id)
         WHERE conv_id != 0
         ORDER BY conv_first_msg DESC;""")
@@ -640,11 +858,16 @@ def show_chat_screen():
     # Convert the time values to America/New_York timezone
     ny_tz = pytz.timezone('America/New_York')
     for memory in memories:
+
         utc_time = str(memory['conv_first_msg'])
         utc_dt = datetime.strptime(utc_time, '%Y-%m-%d %H:%M:%S')
         ny_dt = utc_dt.replace(tzinfo=pytz.utc).astimezone(ny_tz)
-
         memory['conv_first_msg'] = ny_dt.strftime('%a, %b %d, \'%y, %I:%M %p').replace(' 0', ' ').replace('AM', 'am').replace('PM', 'pm')
+
+        utc_time = str(memory['conv_last_msg'])
+        utc_dt = datetime.strptime(utc_time, '%Y-%m-%d %H:%M:%S')
+        ny_dt = utc_dt.replace(tzinfo=pytz.utc).astimezone(ny_tz)
+        memory['conv_last_msg'] = ny_dt.strftime('%a, %b %d, \'%y, %I:%M %p').replace(' 0', ' ').replace('AM', 'am').replace('PM', 'pm')
         
     
     total_tokens = 0

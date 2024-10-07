@@ -1,0 +1,13 @@
+<div id="memory_window_details" class="container">
+    <div class="row">
+        <div class="col-md-12">
+            <h3>Memory #{{ memory['conv_id'] }}</h3>
+            <div class=""><strong>{{ memory['conv_first_msg'] }}</strong></div>
+
+            <div>
+                {{ memory['conv_summary'] | safe }}
+            </div>
+        </div>
+    </div>
+    
+</div>

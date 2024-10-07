@@ -1,0 +1,24 @@
+<div>
+    <form class="ajaxform" data-module="add-tool-parameter" data-action="{{ tool_id }}">
+        
+        <label for="param_name">Parameter Name:</label>
+        <input type="text" class="form-control" id="param_name" name="param_name" required>
+        <div class="err" id="err_param_name"></div>
+
+        <label for="param_type">Parameter Type (int, str):</label>
+        <select class="form-control" name="param_type" id="param_type">
+            <option value="string">string</option>
+            <option value="integer">integer</option>
+            <option value="integer">object</option>
+        </select>
+        <div class="err" id="err_param_type"></div>
+
+        <label for="param_descr">Parameter Description:</label>
+        <textarea class="form-control" id="param_descr" name="param_descr" required></textarea>
+        <div class="err" id="err_param_descr"></div>
+
+        <button type="submit" class="btn btn-primary btn-block mt-3">Submit</button>
+    </form>
+
+    </form>
+</div>

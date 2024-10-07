@@ -1,0 +1,27 @@
+{% for tool in tools %}
+<li class="pt-2 pb-1 col-4">
+    <div class="tool_list_wrapper">
+        <div class="tool_name">
+            <h3 class="h5">{{ tool['tool_name'] }} <a class="btn btn-sm btn-primary float-end" href="/see-tool/{{ tool['tool_id'] }}"><i class="fal fa-edit"></i></a></h3>
+        </div>
+        
+        <div class="tool_descr">
+            Tool Type: <strong>{{ tool['tool_type_name'] }}</strong>
+        </div>
+        <div class="tool_descr">
+            Tool Description: {{ tool['tool_descr'] }}
+        </div>
+        <div>
+            <hr />
+            <h4 class="h6 mt-2">Parameters:</h4>
+            {% if 'parameters' in tool %}
+                {% for tool_param in tool['parameters'] %}
+                    <div class="tool_param">
+                        <code>{{ tool_param['tool_param_name'] }} ({{ tool_param['tool_param_type'] }}) # {{ tool_param['tool_param_descr'] }}</code>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+</li>
+{% endfor %}
