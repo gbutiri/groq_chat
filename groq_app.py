@@ -16,6 +16,7 @@ from groq_tool_routes import *
 from groq_protocols import *
 from groq_date_functs import *
 from groq_msg_functs import *
+from groq_tapestry import *
 
 
 # Initialize the Flask app
@@ -23,17 +24,6 @@ app = Flask(__name__)
 
 # Register blueprints
 app.register_blueprint(tool_bp)
-
-
-#################### MESSAGE FUNCTIONS START ####################
-
-
-@app.template_filter('linebreaksbr')
-def linebreaksbr(text):
-    return text.replace("\n", "<br />")
-
-
-#################### MESSAGE FUNCTIONS END ####################
 
 
 #################### CHAT FUNCTION START ####################
@@ -341,26 +331,6 @@ def chat_completion(messages):
         return str(e)
 
 
-# TODO -> 
-def check_for_daily_tapestry_memories():
-
-    return False
-
-
-# Route to show the memories as a JSON object.
-@app.route("/show_memories", methods=["POST"])
-def show_memories():
-    messages_data = sql("""SELECT * FROM groq_messages 
-        WHERE conv_id = 0 
-        ORDER BY msg_created, msg_id;""")
-
-    output_template = render_template("history.html", messages=messages_data)
-
-    return jsonify({
-        "vbox": output_template
-    })
-
-
 # Route to summarize the conversation. It's called internally when user asks to summarize chat.
 @app.route("/summarize_conversation", methods=["POST"])
 def summarize_conversation():
@@ -415,6 +385,20 @@ def summarize_conversation():
     })
 
 
+# Route to show the memories as a JSON object.
+@app.route("/show_memories", methods=["POST"])
+def show_memories():
+    messages_data = sql("""SELECT * FROM groq_messages 
+        WHERE conv_id = 0 
+        ORDER BY msg_created, msg_id;""")
+
+    output_template = render_template("history.html", messages=messages_data)
+
+    return jsonify({
+        "vbox": output_template
+    })
+
+
 @app.route("/see_memory/<conv_id>", methods=["POST"])
 def see_memory(conv_id):
 
@@ -433,6 +417,17 @@ def see_memory(conv_id):
     window_output = render_template("memory.html", memory=conv_data[0])
 
     return jsonify({"vbox": window_output})
+
+
+#################### TEMPLATE FUNCTIONS START ####################
+
+
+@app.template_filter('linebreaksbr')
+def linebreaksbr(text):
+    return text.replace("\n", "<br />")
+
+
+#################### TEMPLATE FUNCTIONS END ####################
 
 
 ##########################  TEST FUNCTIONS  ##########################
