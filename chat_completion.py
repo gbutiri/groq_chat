@@ -22,13 +22,18 @@ db_config = {
 }
 
 
+#################### TEST FUNCTIONS START ####################
+
 
 def testing_uni(number_in):
     half_of_number = int(number_in) / 2
     return jsonify({"secret": f"Hello Uni! It's me, George, from inside the function. If the function works, you should get back an integer representing approximately 1/2 of the original value {half_of_number}."})
 
 
-#################### TOOL FUNCTIONS ####################
+#################### TEST FUNCTIONS END ####################
+
+
+#################### TOOL FUNCTIONS START ####################
 
 
 @app.route("/see-tools-page", methods=["GET"])
@@ -211,8 +216,8 @@ def update_groq_tool(tool_id):
     })
 
 
-# This function is to mimic the list returned inside the get_tools() function.
 def get_tools():
+    # This function is to mimic the list returned inside the get_tools() function.
 
     tools = sql("""SELECT * FROM groq_tools;""")
     tool_list = []
@@ -340,6 +345,19 @@ def get_tools():
     ]
 
 
+#################### TOOL FUNCTIONS END ####################
+
+
+#################### SYSTEM FUNCTIONS START ####################
+
+
+def project_root_get():
+    return "/var/www/groq_chat"
+
+
+def clean_path(path):
+    return path.lstrip('/').replace(project_root_get(), '').lstrip('/')
+
 
 def get_system_status():
     # Load up python tools to check for memory, CPU, and disk usage.
@@ -349,6 +367,7 @@ def get_system_status():
     memory_info = psutil.virtual_memory()
     disk_usage = psutil.disk_usage('/')
 
+    """
     status = {
         "cpu_usage": cpu_usage,
         "memory_total": memory_info.total,
@@ -358,13 +377,16 @@ def get_system_status():
         "disk_used": disk_usage.used,
         "disk_free": disk_usage.free,
     }
+    """
 
     # Word this in English for the user. Inlucde percetages as well as byte values (MB/GB)
     return f"The system is currently using {cpu_usage}% of the CPU. The memory usage is {memory_info.percent}%. The disk usage is {disk_usage.percent}%. The system has { round(memory_info.total / 1024 / 1024, 2) } MB of memory and { round(disk_usage.total / 1024 / 1024 / 1024, 2) } GB of disk space."
 
 
+#################### SYSTEM FUNCTIONS END ####################
 
 
+#################### API FUNCTIONS START ####################
 
 
 def tell_time():
@@ -413,12 +435,10 @@ def weather_get():
         return jsonify({'error': str(e)}), 500
 
 
-def project_root_get():
-    return "/var/www/groq_chat"
+#################### API FUNCTIONS END ####################
 
 
-def clean_path(path):
-    return path.lstrip('/').replace(project_root_get(), '').lstrip('/')
+#################### PROTOCOL FUNCTIONS START ####################
 
 
 def get_function_names_from_file(file_path):
@@ -526,6 +546,7 @@ def get_whole_function_from_file(file_path, function_name):
         print(f"DEBUG: Exception occurred: {err}")  # Debug print
         return str(err), 500
 
+
 def file_view(file_path):
     file_path = clean_path(file_path)
     base_directory = project_root_get()
@@ -568,8 +589,10 @@ def file_view(file_path):
         return str(err), 500
 
 
-####################  ROUTES  ####################
+#################### PROTOCOL FUNCTIONS END ####################
 
+
+#################### MESSAGE FUNCTIONS START ####################
 
 
 def get_messages_lengths(conv_id = 0):
@@ -582,6 +605,60 @@ def get_messages_lengths(conv_id = 0):
         messages.append(message["msg_content"])
     
     return "".join(messages)
+
+
+#################### MESSAGE FUNCTIONS START ####################
+
+
+def get_initial_system_messages():
+    # Add the final system messages to include the time and date.
+    tell_time_message = tell_time()
+
+    current_weather = weather_get()
+
+    # System status
+    system_status = get_system_status()
+
+
+    message = {
+        "role": "system",
+        "content": f"{tell_time_message} {current_weather} {system_status}",
+    }
+
+    return message
+
+
+def format_db_messages(messages):
+    formatted_messages = []
+    token_count = 0
+    for message in messages:
+        formatted_messages.append({
+            "role": message["msg_role"],
+            "content": message["msg_content"],
+        })
+        token_count += get_token_count(message['msg_content'])
+    return (formatted_messages, token_count)
+
+
+#################### MESSAGE FUNCTIONS END ####################
+
+
+#################### DATE FUNCTIONS START ####################
+
+
+def daterange(start_date, end_date):
+    
+    start_date_timestamp = datetime.strptime(str(start_date), '%Y-%m-%d %H:%M:%S')
+    end_date_timestamp = datetime.strptime(str(end_date), '%Y-%m-%d %H:%M:%S')
+
+    for n in range(int((end_date_timestamp - start_date_timestamp).days) + 1):
+        yield start_date_timestamp + timedelta(n)
+
+
+#################### DATE FUNCTIONS END ####################
+
+
+####################  ROUTES  ####################
 
 @app.route("/remove_message/<msg_id>", methods=["POST"])
 def remove_message(msg_id):
@@ -602,25 +679,6 @@ def remove_message(msg_id):
             "#token_count": token_count,
         }
     })
-
-
-
-def get_initial_system_messages():
-    # Add the final system messages to include the time and date.
-    tell_time_message = tell_time()
-
-    current_weather = weather_get()
-
-    # System status
-    system_status = get_system_status()
-
-
-    message = {
-        "role": "system",
-        "content": f"{tell_time_message} {current_weather} {system_status}",
-    }
-
-    return message
 
 
 
@@ -751,28 +809,6 @@ def chat_completion(messages):
         return str(e)
 
 
-def format_db_messages(messages):
-    formatted_messages = []
-    token_count = 0
-    for message in messages:
-        formatted_messages.append({
-            "role": message["msg_role"],
-            "content": message["msg_content"],
-        })
-        token_count += get_token_count(message['msg_content'])
-    return (formatted_messages, token_count)
-
-
-def daterange(start_date, end_date):
-    
-    start_date_timestamp = datetime.strptime(str(start_date), '%Y-%m-%d %H:%M:%S')
-    end_date_timestamp = datetime.strptime(str(end_date), '%Y-%m-%d %H:%M:%S')
-
-    for n in range(int((end_date_timestamp - start_date_timestamp).days) + 1):
-        yield start_date_timestamp + timedelta(n)
-
-    
-
 def check_for_daily_tapestry_memories():
 
     return False
@@ -780,6 +816,7 @@ def check_for_daily_tapestry_memories():
 
 def get_initial_system_message():
     return [{"role": "system", "content": "Your name is Uni. You are a digital student who wants to learn about his creator's world. You are but a small child. Your creator's name is George. You are now speaking with George."}]
+
 
 @app.route("/send_groq_chat", methods=["POST"])
 def send_groq_chat():
@@ -890,6 +927,7 @@ def show_memories():
     return jsonify({
         "vbox": output_template
     })
+
 
 @app.route("/summarize_conversation", methods=["POST"])
 def summarize_conversation():
@@ -1004,7 +1042,6 @@ def git_update():
         return jsonify({"vbox": f"Error: {str(e)}"})
 
 
-
 @app.route("/see_memory/<conv_id>", methods=["POST"])
 def see_memory(conv_id):
 
@@ -1036,9 +1073,6 @@ def main():
         "content": "Hello! I'm George.",
     }])
     print(jsonify({"reply": response}))
-
-
-
 
 
 ##########################  SQL FUNCTIONS  ##########################
