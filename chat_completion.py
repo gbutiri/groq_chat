@@ -5,8 +5,11 @@ from groq import Groq # type: ignore
 import json
 import pytz
 from datetime import datetime
+import psutil
 import mysql.connector
 import tiktoken # type: ignore
+from datetime import timedelta
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -249,8 +252,10 @@ def get_tools():
         tool_json_item['function']['parameters'] = tool_params_json
         tool_list.append(tool_json_item)
 
-    print("tool_list: ", tool_list)
+    print("-- DEBUG: tool_list: ", tool_list)
 
+    # Convert the generated object into a JSON friendly object.
+    # tool_list = json.dumps(tool_list)
     return tool_list
 
     return [
@@ -271,28 +276,6 @@ def get_tools():
                 
                 },
             }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_whole_function_from_file",
-                "description": "Whenever the user asks you to view the functions inside a python file, call this function. The file path is passed as a parameter.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "file_path": {
-                            "type": "string",
-                            "description": "The path of the file from the root: `/file_name.py` or `/folder/file_name.py`. The path is cleaned up in the function.",
-                        },
-                        "function_name": {
-                            "type": "string",
-                            "description": "The function name we'll be seeking in the file from the root: `/file_name.py` or `/folder/file_name.py`.",
-                        }
-                    },
-                    "required": ["file_path", "function_name"],
-
-                }
-            },
         },
         {
             "type": "function",
@@ -358,17 +341,45 @@ def get_tools():
 
 
 
+def get_system_status():
+    # Load up python tools to check for memory, CPU, and disk usage.
+    # Call psutil.cpu_percent twice to get accurate CPU usage
+    psutil.cpu_percent(interval=1)
+    cpu_usage = psutil.cpu_percent(interval=1)
+    memory_info = psutil.virtual_memory()
+    disk_usage = psutil.disk_usage('/')
+
+    status = {
+        "cpu_usage": cpu_usage,
+        "memory_total": memory_info.total,
+        "memory_used": memory_info.used,
+        "memory_free": memory_info.free,
+        "disk_total": disk_usage.total,
+        "disk_used": disk_usage.used,
+        "disk_free": disk_usage.free,
+    }
+
+    # Word this in English for the user. Inlucde percetages as well as byte values (MB/GB)
+    return f"The system is currently using {cpu_usage}% of the CPU. The memory usage is {memory_info.percent}%. The disk usage is {disk_usage.percent}%. The system has { round(memory_info.total / 1024 / 1024, 2) } MB of memory and { round(disk_usage.total / 1024 / 1024 / 1024, 2) } GB of disk space."
+
+
+
+
+
+
 def tell_time():
     try:
         # Hardcoded timezone for Cleveland, OH
         timezone = "America/New_York"
         time_response = requests.get(f'https://worldtimeapi.org/api/timezone/{timezone}')
         time_data = time_response.json()
-        return jsonify({
-            'timezone': timezone,
-            'datetime': time_data.get('datetime'),
-            'location': 'Cleveland, OH'
-        })
+        # convert the data into a human readable format
+        # First, we do the time and date format : .strftime('%a, %b %d, \'%y, %I:%M %p').replace(' 0', ' ').replace('AM', 'am').replace('PM', 'pm')
+        time_and_date_string = str(time_data.get('datetime'))
+        time_and_date_formatted = datetime.strptime(time_and_date_string, '%Y-%m-%dT%H:%M:%S.%f%z').astimezone(pytz.timezone(timezone)).strftime('%a, %b %d, \'%y, %I:%M %p').replace(' 0', ' ').replace('AM', 'am').replace('PM', 'pm')
+
+        return f"The current time and date in Cleveland, OH is {time_and_date_formatted}."
+    
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -382,7 +393,7 @@ def weather_get():
         
         weather_response = requests.get(url)
         weather_data = weather_response.json()
-        return jsonify({
+        weather_data = {
             'location': weather_data['location']['name'],
             'region': weather_data['location']['region'],
             'country': weather_data['location']['country'],
@@ -393,7 +404,11 @@ def weather_get():
             'wind_mph': weather_data['current']['wind_mph'],
             'wind_kph': weather_data['current']['wind_kph'],
             'icon': weather_data['current']['condition']['icon']
-        })
+        }
+
+        # Let's return back the weather in human readable format.
+        return f"The current weather condition for {location} are as follows. {weather_data['condition']} with a temperature of {weather_data['temperature_f']}°F ({weather_data['temperature_c']}°C). The humidity is {weather_data['humidity']}%. The wind speed is {weather_data['wind_mph']} mph ({weather_data['wind_kph']} kph)."
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -589,6 +604,26 @@ def remove_message(msg_id):
     })
 
 
+
+def get_initial_system_messages():
+    # Add the final system messages to include the time and date.
+    tell_time_message = tell_time()
+
+    current_weather = weather_get()
+
+    # System status
+    system_status = get_system_status()
+
+
+    message = {
+        "role": "system",
+        "content": f"{tell_time_message} {current_weather} {system_status}",
+    }
+
+    return message
+
+
+
 def chat_completion(messages):
     # print(os.environ.get("GROQ_API_KEY"))
     client = Groq(
@@ -621,11 +656,31 @@ def chat_completion(messages):
             # Define the available tools that can be called by the LLM
 
             functions = sql("""SELECT * FROM groq_tools;""")
+            print("-- DEBUG: functions: ", functions)
 
             available_functions = {}
 
             for func in functions:
-                available_functions[func['tool_name']] = func['tool_name']
+                available_functions[func['tool_name']] = globals().get(func['tool_name'])
+
+            """
+            available_functions = {
+                "tell_time": tell_time,
+                "weather_get": weather_get,
+                "testing_uni": testing_uni,
+                "git_update": git_update,
+                "file_view": file_view,
+                "get_function_names_from_file": get_function_names_from_file,
+                "get_whole_function_from_file": get_whole_function_from_file,
+            }
+            """
+
+            print("-- DEBUG: available_functions: ", available_functions)
+
+            messages.append({
+                "role": "tool",
+                "content": f"Called the {func['tool_name']} function.",
+            })
 
             # Process each tool call
             for tool_call in tool_calls:
@@ -648,6 +703,15 @@ def chat_completion(messages):
                 else:
                     function_response = function_to_call()
                 print("-- DEBUG: function_response: ", function_response)
+
+                # Check to see if the function response is a string. If so, return it.
+                if isinstance(function_response, str):
+
+                    # Check to see if the function response is a response object.
+                    if function_response == "Conversation Summarized.":
+                        
+                        # Stop code execution here.
+                        return function_response
                 
                 # Test to see if the function response is a response object.
                 if hasattr(function_response, 'get_data') and callable(function_response.get_data):
@@ -664,7 +728,7 @@ def chat_completion(messages):
                     "tool_call_id": tool_call.id, 
                     "role": "tool", # Indicates this message is from tool use
                     "name": function_name,
-                    "content": f"Data that came back. Interpret it \n\n{func_response_text}.",
+                    "content": f"Can you summarize the data for me, focusing on the basic conversational details and relevant information, and make it sound conversational? Please keep it short.\n\n{func_response_text}.",
                 }]
 
             # Insert this as a message into the groq_messages table
@@ -699,6 +763,21 @@ def format_db_messages(messages):
     return (formatted_messages, token_count)
 
 
+def daterange(start_date, end_date):
+    
+    start_date_timestamp = datetime.strptime(str(start_date), '%Y-%m-%d %H:%M:%S')
+    end_date_timestamp = datetime.strptime(str(end_date), '%Y-%m-%d %H:%M:%S')
+
+    for n in range(int((end_date_timestamp - start_date_timestamp).days) + 1):
+        yield start_date_timestamp + timedelta(n)
+
+    
+
+def check_for_daily_tapestry_memories():
+
+    return False
+
+
 def get_initial_system_message():
     return [{"role": "system", "content": "Your name is Uni. You are a digital student who wants to learn about his creator's world. You are but a small child. Your creator's name is George. You are now speaking with George."}]
 
@@ -730,12 +809,20 @@ def send_groq_chat():
             "role": "system",
             "content":  f"[{time_stamp} - {time_stamp_end}] - Individual memory:\n{content}",
         })
+    
+    
+
+
+    print("-- DEBUG: messages: ", messages)
 
     # Format messages from the database.
     db_messages, token_count = format_db_messages(messages_data)
 
     # Add current conversation.
     messages.extend(db_messages)
+
+    # Add the final system messages to include the time and date and status.
+    messages.append(get_initial_system_messages())
 
     # Add message submitted from form.
     messages.append({
@@ -744,6 +831,20 @@ def send_groq_chat():
     })
 
     # print(messages)
+
+    # This is where we need to check the DB to see if there are any messages in it.
+    # If not, we insert the initial one with the initial conversational summary stats.
+    # We will also include a message stating that this is the first message in this conversation.
+    existint_messages = sql("""SELECT * FROM groq_messages WHERE conv_id = 0;""")
+    if not existint_messages:
+
+        get_initial_system_messages_content = get_initial_system_messages()
+        content = f"""This is the first message in this conversation. The conversation has started here. Initial conversation stats: {get_initial_system_messages_content["content"]}"""
+
+        # Insert the initial message into the database.
+        sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content)
+            VALUES (0, 'system', %s);""", (content, ))
+        
 
     # Save the user message to the database.
     sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content)
@@ -791,7 +892,10 @@ def show_memories():
     })
 
 @app.route("/summarize_conversation", methods=["POST"])
-def summarize_conversation(conv_id = 0):
+def summarize_conversation():
+
+    conv_id = 0
+
     messages_data = sql("""SELECT * FROM groq_messages
     WHERE conv_id = %s
     AND msg_role != 'tool'
@@ -843,7 +947,8 @@ def summarize_conversation(conv_id = 0):
 @app.route("/show-chat-screen", methods=["GET"])
 def show_chat_screen():
 
-    
+    check_for_daily_tapestry_memories()
+
     messages = sql("""SELECT * FROM groq_messages 
         WHERE conv_id = 0 
         ORDER BY msg_created, msg_id;""")
