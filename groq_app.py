@@ -437,8 +437,14 @@ def linebreaksbr(text):
 
 @app.template_filter('readable_date')
 def readable_date(date):
+
+    ny_tz = pytz.timezone('America/New_York')
+    utc_time = str(date)
+    utc_dt = datetime.strptime(utc_time, '%Y-%m-%d %H:%M:%S')
+    ny_dt = utc_dt.replace(tzinfo=pytz.utc).astimezone(ny_tz)
+
     # Return date in the format of ["Mon, Jan 1st '24", "12:00 am"]
-    return date.strftime('%a, %b %d, \'%y, %I:%M %p').replace(' 0', ' ').replace('AM', 'am').replace('PM', 'pm')
+    return ny_dt.strftime('%a, %b %d, \'%y, %I:%M %p').replace(' 0', ' ').replace('AM', 'am').replace('PM', 'pm')
 
 @app.template_filter('readable_date_time')
 def readable_date_time(date):
