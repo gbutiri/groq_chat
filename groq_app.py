@@ -5,7 +5,6 @@ from groq import Groq # type: ignore
 import json
 import pytz
 from datetime import datetime
-import tiktoken # type: ignore
 from datetime import timedelta
 from datetime import datetime
 
@@ -32,44 +31,38 @@ app.register_blueprint(tool_bp)
 @app.route("/show-chat-screen", methods=["GET"])
 def show_chat_screen():
 
-    check_for_daily_tapestry_memories()
+    check_for_tapestry_memories()
+    debug = False
+    if debug:
+        return jsonify({"vbox": "Daily tapestry memories have completed."})
+        #exit(0)
 
-    messages = sql("""SELECT * FROM groq_messages 
+    messages_sql = sql("""SELECT * FROM groq_messages 
         WHERE conv_id = 0 
         ORDER BY msg_created, msg_id;""")
 
-    # Make sure we select the time values in America/New_York timezone.
-    # Fetch memories from the database
-    memories = sql("""SELECT * FROM groq_conversations 
-        LEFT JOIN groq_conv_types USING(conv_type_id)
-        WHERE conv_id != 0
-        ORDER BY conv_first_msg DESC;""")
-
-    # Convert the time values to America/New_York timezone
-    ny_tz = pytz.timezone('America/New_York')
-    for memory in memories:
-
-        utc_time = str(memory['conv_first_msg'])
-        utc_dt = datetime.strptime(utc_time, '%Y-%m-%d %H:%M:%S')
-        ny_dt = utc_dt.replace(tzinfo=pytz.utc).astimezone(ny_tz)
-        memory['conv_first_msg'] = ny_dt.strftime('%a, %b %d, \'%y, %I:%M %p').replace(' 0', ' ').replace('AM', 'am').replace('PM', 'pm')
-
-        utc_time = str(memory['conv_last_msg'])
-        utc_dt = datetime.strptime(utc_time, '%Y-%m-%d %H:%M:%S')
-        ny_dt = utc_dt.replace(tzinfo=pytz.utc).astimezone(ny_tz)
-        memory['conv_last_msg'] = ny_dt.strftime('%a, %b %d, \'%y, %I:%M %p').replace(' 0', ' ').replace('AM', 'am').replace('PM', 'pm')
-        
-    
     total_tokens = 0
-    for msg in messages:
+
+    # Fetch memories from the database
+    memories = get_tapestry_memories()
+
+    # Reverse the records to show the most recent first.
+    memories.reverse()
+
+    for mem in memories:
+        total_tokens += get_token_count(mem['conv_summary'])
+
+    
+    for msg in messages_sql:
         total_tokens += get_token_count(msg['msg_content'])
         
+    
 
-    return render_template("chat.html", messages=messages, total_tokens=total_tokens, memories=memories)
+    return render_template("chat.html", messages=messages_sql, total_tokens=total_tokens, memories=memories)
 
 
 def get_initial_system_message():
-    return [{"role": "system", "content": "Your name is Uni. You are a digital student who wants to learn about his creator's world. You are but a small child. Your creator's name is George. You are now speaking with George."}]
+    return [{"role": "system", "content": "Your name is Uni. You are a digital student who wants to learn about his creator's world. You are but a small child. Your creator's name is George (he/him). You are now speaking with him."}]
 
 
 @app.route("/remove_message/<msg_id>", methods=["POST"])
@@ -96,6 +89,18 @@ def remove_message(msg_id):
 @app.route("/send_groq_chat", methods=["POST"])
 def send_groq_chat():
 
+    # Check for the initial system message in the database.
+    messages_sql = sql("""SELECT * FROM groq_messages 
+        WHERE conv_id = 0 
+        ORDER BY msg_created, msg_id;""")
+    
+    # If we don't have any messages in the database, we need to insert the initial system message in the DB.
+    if not messages_sql:
+        # Include the time, date and system status in the initial system message.
+        get_system_status_message = get_initial_system_messages()['content'] + "\n\nThis is the first message in this current conversation. The conversation has started here. The memrories before happened before this moment. The conversation is now active."
+
+        sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content)
+            VALUES (0, 'system', %s);""", (get_system_status_message, ))
 
     messages_data = sql("""SELECT * FROM groq_messages 
         WHERE conv_id = 0 
@@ -112,15 +117,19 @@ def send_groq_chat():
     })
 
     # Summaries from the DB.
-    summaries = sql("""SELECT * FROM groq_conversations ORDER BY conv_first_msg DESC;""")
+    summaries = get_tapestry_memories()
+    summary_token_count = 0
+
     for summary in summaries:
         content = summary["conv_summary"]
         time_stamp = summary["conv_first_msg"]
         time_stamp_end = summary["conv_last_msg"]
+        memory_type = summary["conv_type_name"]
         messages.append({
             "role": "system",
-            "content":  f"[{time_stamp} - {time_stamp_end}] - Individual memory:\n{content}",
+            "content":  f"[{time_stamp}] - {memory_type} memory:\n{content}",
         })
+        summary_token_count += get_token_count(content)
 
 
     print("-- DEBUG: messages: ", messages)
@@ -139,21 +148,6 @@ def send_groq_chat():
         "role": "user",
         "content": request.form["message"],
     })
-
-    # print(messages)
-
-    # This is where we need to check the DB to see if there are any messages in it.
-    # If not, we insert the initial one with the initial conversational summary stats.
-    # We will also include a message stating that this is the first message in this conversation.
-    existint_messages = sql("""SELECT * FROM groq_messages WHERE conv_id = 0;""")
-    if not existint_messages:
-
-        get_initial_system_messages_content = get_initial_system_messages()
-        content = f"""This is the first message in this conversation. The conversation has started here. Initial conversation stats: {get_initial_system_messages_content["content"]}"""
-
-        # Insert the initial message into the database.
-        sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content)
-            VALUES (0, 'system', %s);""", (content, ))
         
     # Save the user message to the database.
     sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content)
@@ -172,6 +166,8 @@ def send_groq_chat():
     messages_data = sql("""SELECT * FROM groq_messages 
         WHERE conv_id = 0 
         ORDER BY msg_created, msg_id;""")
+    
+    token_count = token_count + summary_token_count
 
     output_template = render_template("messages.html", messages=messages_data, token_count=token_count)
 
@@ -202,8 +198,8 @@ def chat_completion(messages):
         completion = client.chat.completions.create(
             messages=messages,
             # model="llama3-8b-8192",
-            # model="llama3-groq-8b-8192-tool-use-preview",
-            model="llama3-groq-70b-8192-tool-use-preview",
+            model="llama3-groq-8b-8192-tool-use-preview",
+            # model="llama3-groq-70b-8192-tool-use-preview",
             stream=False,
             tools=tools,
             tool_choice="auto",
@@ -230,13 +226,14 @@ def chat_completion(messages):
 
             """
             available_functions = {
+                "testing_uni": testing_uni,
+                "get_whole_function_from_file": get_whole_function_from_file,
+                "get_function_names_from_file": get_function_names_from_file,
+                "file_view": file_view,
                 "tell_time": tell_time,
                 "weather_get": weather_get,
-                "testing_uni": testing_uni,
                 "git_update": git_update,
-                "file_view": file_view,
-                "get_function_names_from_file": get_function_names_from_file,
-                "get_whole_function_from_file": get_whole_function_from_file,
+                "summarize_conversation": summarize_conversation,
             }
             """
 
@@ -291,37 +288,40 @@ def chat_completion(messages):
                 # Add the tool response to the conversation
                 tool_messages = []
 
-
+                init_sys_msg = get_initial_system_message()['content']
 
                 tool_messages.append({
                     "tool_call_id": tool_call.id, 
                     "role": "tool", # Indicates this message is from tool use
                     "name": function_name,
-                    "content": f"""Can you summarize the data for me, focusing on the basic conversational details and relevant information, and make it sound conversational? Please keep it short.
-                    
-                    If the data that comes back is weather data, reply simply with the weather information. If asked for time, simply speak the time.
-                    \n\n{func_response_text}.""",
+                    "content": f"""{ init_sys_msg }\n\nCan you summarize the conversation for me using the function tool calls? Focus on the basic conversational details and relevant information, and make it sound conversational, like a memory? Please keep it short, yet relevant. Examples are: "Today, I ..." or "I asked about ...".\n\nIf the data that comes back is weather data, reply simply with the weather information. If asked for time, simply speak the time. If it's JSON format, make it sound human readable.
+                    \n\n{ func_response_text }.""",
                 })
 
-            # Insert this as a message into the groq_messages table
-            # But first, check to see if function_response as a get_data method.
-            if hasattr(function_response, 'get_data') and callable(function_response.get_data):
-                content_out = function_response.get_data(as_text=True)
-            else:
-                content_out = str(function_response)
-            sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content, msg_tool_name)
-                VALUES (0, 'tool', %s, %s);""", (content_out, function_name, ))
+                # Insert this as a message into the groq_messages table
+                # But first, check to see if function_response as a get_data method.
+                if hasattr(function_response, 'get_data') and callable(function_response.get_data):
+                    content_out = function_response.get_data(as_text=True)
+                else:
+                    content_out = str(function_response)
 
-            # Make a second API call with the updated conversation
-            second_response = client.chat.completions.create(
-                messages=tool_messages,
-                model="llama3-8b-8192",
-            )
+                print_debug_line(f" -- The content_out is: { content_out }.", "white")
 
-            print("-- DEBUG: second_response: ", second_response)
+                if str(function_name).strip() != "summarize_conversation":
+                    
+                    sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content, msg_tool_name)
+                    VALUES (0, 'tool', %s, %s);""", (content_out, function_name, ))
 
-            # Return the final response
-            return second_response.choices[0].message.content
+                    # Make a second API call with the updated conversation
+                    second_response = client.chat.completions.create(
+                        messages=tool_messages,
+                        model="llama3-8b-8192",
+                    )
+
+                    print("-- DEBUG: second_response: ", second_response)
+
+                    # Return the final response
+                    return second_response.choices[0].message.content
         
         else:
             print("-- DEBUG: Not a tool call.")
@@ -335,7 +335,13 @@ def chat_completion(messages):
 @app.route("/summarize_conversation", methods=["POST"])
 def summarize_conversation():
 
+    memories = get_tapestry_memories()
+
     conv_id = 0
+    total_tokens = 0
+
+    for mem in memories:
+        total_tokens += get_token_count(mem['conv_summary'])
 
     messages_data = sql("""SELECT * FROM groq_messages
     WHERE conv_id = %s
@@ -350,11 +356,13 @@ def summarize_conversation():
             "role": message["msg_role"], 
             "content": message["msg_content"]
         })
+        total_tokens += get_token_count(message['msg_content'])
 
+    print_debug_line(f" -- The total tokens in the conversation are: { total_tokens }.", "green")
     
     messages.append({
         "role": "user",
-        "content": "Let's create a summary of the entire conversation up to this point. Write it as if it was a memory. Do not include previous memories in this summary, unless relevant.",
+        "content": "Let's create a summary of the entire conversation up to this point. Write it as if it was a memory. Do not include previous memories in this summary, unless relevant and related.",
     })
 
     client = Groq(
@@ -425,6 +433,17 @@ def see_memory(conv_id):
 @app.template_filter('linebreaksbr')
 def linebreaksbr(text):
     return text.replace("\n", "<br />")
+
+
+@app.template_filter('readable_date')
+def readable_date(date):
+    # Return date in the format of ["Mon, Jan 1st '24", "12:00 am"]
+    return date.strftime('%a, %b %d, \'%y, %I:%M %p').replace(' 0', ' ').replace('AM', 'am').replace('PM', 'pm')
+
+@app.template_filter('readable_date_time')
+def readable_date_time(date):
+    # Return date in the format of ["Mon, Jan 1st '24"]
+    return date.strftime('%a, %b %d, \'%y').replace(' 0', ' ')
 
 
 #################### TEMPLATE FUNCTIONS END ####################

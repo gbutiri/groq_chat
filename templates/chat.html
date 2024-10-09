@@ -32,13 +32,14 @@
                                 <div class="memory_title">
                                     <a href="#" style="color: {{ memory['conv_type_color'] }} !important;" class="tmbtn memory-summary" data-module="see_memory" data-action="{{ memory['conv_id'] }}">{{ memory['conv_title'] }}
                                         <div>
-                                            {{ memory['conv_first_msg'] }}
                                             <span class="badge rounded-pill text-bg-primary" style="background-color: {{ memory['conv_type_color'] }} !important;">
                                                 {{ memory['conv_type_name'][:1] }}
                                             </span>
-                                        </div>
-                                        <div>
-                                            {{ memory['conv_last_msg'] }}
+                                            {% if memory['conv_type_name'][:1] == "I" %}
+                                            {{ memory['conv_first_msg'] | readable_date }}
+                                            {% else %}
+                                            {{ memory['conv_first_msg'] | readable_date_time }}
+                                            {% endif %}
                                         </div>
                                     </a>
                                 </div>
