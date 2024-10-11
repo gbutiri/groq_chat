@@ -365,7 +365,7 @@ def check_for_tapestry_memories():
         print_debug_line(f" -- The current date is `earliest_date`: {earliest_date}.", "blue")
 
         # Get the individual conversations (conv_id = 0) from the DB for the current date.
-        conv_summaries = sql("SELECT * FROM groq_conversations WHERE conv_type_id = 0 AND DATE(conv_first_msg) = %s;", (earliest_date, ))
+        conv_summaries = sql("SELECT * FROM groq_conversations LEFT JOIN groq_conv_types USING(conv_type_id) WHERE conv_type_id = 0 AND DATE(conv_first_msg) = %s;", (earliest_date, ))
 
         print_debug_line(f" -- -- There are { len(conv_summaries) } summaries for this day.", "blue")
 
@@ -523,7 +523,8 @@ def get_tapestry_memories(before_date = None):
         daily_summary = sql("SELECT * FROM groq_conversations LEFT JOIN groq_conv_types USING(conv_type_id) WHERE conv_type_id = 1 AND DATE(conv_first_msg) = %s;", (earliest_date, ))
 
         if len(daily_summary) > 0:
-            print_debug_line(f" -- -- There is a daily summary for this day.", "cyan")
+            print_debug_line(f" -- -- The ID of the conversation is `daily_summary[0]['conv_id']`: {daily_summary[0]['conv_id']}.", "cyan")
+            print_debug_line(f" -- -- The conv_type_name of the conversation is `daily_summary[0]['conv_type_name']`: {daily_summary[0]['conv_type_name']}.", "cyan")
             memories.append(daily_summary[0])
 
         else:
