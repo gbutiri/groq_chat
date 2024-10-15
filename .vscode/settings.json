@@ -1,0 +1,77 @@
+{
+    "editor.tabSize": 2,
+    "files.autoSave": "afterDelay",
+    "customCopilot.settings": {
+        "customCopilot.dbSchemas": {
+            "gpt_conversations": {
+                "conv_id": "VARCHAR(255) NOT NULL DEFAULT ''",
+                "conv_model": "VARCHAR(255) DEFAULT NULL",
+                "conv_gizmo": "VARCHAR(255) DEFAULT NULL",
+                "conv_is_archived": "TINYINT(1) DEFAULT NULL",
+                "conv_created": "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()",
+                "primaryKey": "conv_id"
+            },
+            "gpt_messages": {
+                "msg_id": "VARCHAR(255) NOT NULL DEFAULT ''",
+                "conv_id": "VARCHAR(255) DEFAULT NULL",
+                "parent_id": "VARCHAR(255) DEFAULT NULL",
+                "children_ids": "TEXT DEFAULT NULL",
+                "msg_role": "VARCHAR(255) DEFAULT NULL",
+                "msg_content": "LONGTEXT DEFAULT NULL",
+                "msg_created": "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()",
+                "primaryKey": "msg_id",
+                "foreignKeys": {
+                    "conv_id": {
+                        "references": "gpt_conversations(conv_id)",
+                        "onDelete": "NO ACTION",
+                        "onUpdate": "NO ACTION"
+                    }
+                }
+            },
+            "groq_conv_types": {
+                "conv_type_id": "INT(11) UNSIGNED NOT NULL DEFAULT 0",
+                "conv_type_name": "VARCHAR(20) NOT NULL DEFAULT ''",
+                "conv_type_color": "VARCHAR(10) NOT NULL DEFAULT ''",
+                "primaryKey": "conv_type_id"
+            },
+            "tableFieldTypicalPrefixes": [
+                {"groq_conv_types": "conv_type_"},
+                {"groq_messages": "msg_"},
+                {"groq_conversations": "conv_"},
+            ]
+        },
+        "customPilot.conv_type_ids": {
+            "0": "Conversational",
+            "1": "Daily",
+            "2": "Weekly",
+            "3": "Monthly",
+            "4": "Beggining of Month",
+            "5": "End of Month",
+            "6": "Quarterly",
+            "7": "Yearly"
+        },
+        "customPilot.variableNameTypePrefix": {
+            "int": "int_",
+            "float": "float_",
+            "string": "str_",
+            "boolean": "bool_",
+            "datetime": "dtm_",
+            "time": "tm_",
+            "date": "dt_",
+            "sql results": "sql_",
+            "json": "json_"
+        },
+        "customCopilot.codeStandards": {
+            "1": "function should start and end with a call to print_debug_line to log activity for the function. This should be the first and last line of the function before a return if applicable.",
+            "2": "Function names should explain what they do `verb_adj_noun` and end with `_by` or `_for`.",
+        },
+        "ajaxform": {
+            "description": "Class for handling AJAX form submissions",
+            "usage": "Include '/static/dispatch.js' for AJAX functionality"
+        },
+        "tmbtn": {
+            "description": "Class for handling AJAX form submissions",
+            "usage": "Include '/static/dispatch.js' for AJAX functionality"
+        },
+    }
+}

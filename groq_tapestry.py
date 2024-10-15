@@ -348,6 +348,136 @@ def create_weekly_summary_for_date_of(monday_of):
     sql("""INSERT INTO groq_conversations (conv_type_id, conv_first_msg, conv_last_msg, conv_summary) VALUES (2, %s, %s, %s);""", (monday_of, str((datetime.strptime(monday_of, "%Y-%m-%d") + timedelta(days=6)).strftime("%Y-%m-%d")), week_convs_content_str))
     
 
+def generate_new_conversational_summaries(earliest_date):
+
+    print_debug_line(f"Generating new conversational summaries for the day of {earliest_date}.", "yellow")
+
+    # Get the messages grouped by conv_id, where MIN(msg_created) = earliest_date
+    sql_unique_conv_ids = sql("""SELECT DISTINCT conv_id, MIN(DATE(msg_created)) AS conv_msg_created, MIN(msg_created) AS conv_first_msg, MAX(msg_created) AS conv_last_msg
+        FROM groq_messages 
+        WHERE groq_messages.conv_id NOT IN (
+            SELECT groq_conversations.conv_id 
+            FROM groq_conversations
+        )
+        GROUP BY conv_id
+        HAVING MIN(DATE(msg_created)) = %s
+        ORDER BY msg_created;""", (earliest_date, ))
+
+    print_debug_line(f" -- There are { len(sql_unique_conv_ids) } unique conversations for this day.", "cyan")
+
+    if len(sql_unique_conv_ids) > 0:
+        print_debug_line(f" -- There are { len(sql_unique_conv_ids) } unique conversations for this day.", "cyan")
+        # continue
+    
+    for conv_id in sql_unique_conv_ids:
+
+        print_debug_line(f" -- The current ID for the conversation was `conv_id`: { conv_id['conv_id'] }.", "cyan")
+
+        # Check for existing memory.
+        existing_memory = sql("SELECT * FROM groq_conversations WHERE conv_id = %s AND conv_type_id = 0;", (conv_id['conv_id'], ))
+        if existing_memory:
+            print_debug_line(f" -- -- There is already a memory for this conversation.", "cyan")
+
+        else:
+            print_debug_line(f" -- -- There is no memory for this conversation.", "cyan")
+
+            print_debug_line(f" -- -- The ID of the conversation is `conv_id['conv_id']`: {conv_id['conv_id']}.", "cyan")
+
+            # Get all of the messages where the conv_id = conv_id['conv_id']
+            sql_messages = sql("SELECT * FROM groq_messages WHERE conv_id = %s ORDER BY msg_created, msg_id;", (conv_id['conv_id'], ))
+
+            print_debug_line(f" -- -- There are { len(sql_messages) } messages for this conversation.", "cyan")
+
+            # A list to store the content
+            messages_content = []
+            for msg in sql_messages:
+
+                if (msg['msg_role'] == "assistant"):
+                    msg_role = "Uni"
+                elif (msg['msg_role'] == "user"):
+                    msg_role = "George"
+
+                msg_content = str(msg_role) + ": \n" + str(msg['msg_content'])
+                messages_content.append(msg_content)
+            
+            messages_content_str = "\n\n".join(messages_content)
+            
+            messages = get_initial_system_message()
+
+            print_debug_line(f" -- -- The messages_content_str is: {messages_content_str}.", "cyan")
+
+            # Now we create a new conversation summary for this conversation.
+
+            # Load up tapestry. Use Tapestry to get the previous memories until this moment.
+            memories = get_tapestry_memories(earliest_date)
+            print_debug_line(f" -- -- -- The Tapestry memories are: { memories }.", "green")
+
+            conv_type_name = "conversational"
+
+            for mem in memories:
+                print_debug_line(f" -- -- -- The previous memory is: { mem['conv_summary'] }.", "white")
+                messages.append({
+                    "role": "system",
+                    "content": f"This is a previous {conv_type_name} memory from {str(mem['conv_first_msg'])}\n--- Memroy Start\n{mem['conv_summary']}\n--- Memory End",
+                })
+
+
+
+            if not memories:
+                print_debug_line(f" -- -- There are no memories in the database.", "red")
+                messages.append({"role": "system", "content": f"You do not have any previous memories. This is your first memory with George. Make it a good one."})
+
+            # Add the message content to the messages list:
+            messages.append({"role": "system", "content": f"Your current conversation starts now:\n\n{messages_content_str}"})
+            messages.append({"role": "system", "content": f"Your current conversation ends here."})
+
+
+            str_instructions = f"You have just finished a conversation with George. You are going to create a summary of this conversation you've just had with him between { str(conv_id['conv_first_msg']) } and { str(conv_id['conv_last_msg'])} on { earliest_date }. You are writing in your Tapestry Book of memories. If you do not see any memories from previous conversations, it means that this is your first conversation with George."
+
+            messages.append({"role": "system", "content": str_instructions})
+
+            print_debug_line(f" -- -- -- The str_instructions are: {str_instructions}.", "cyan")
+
+
+            client = Groq(
+                api_key=os.environ.get("GROQ_API_KEY"),
+            )
+
+            print_debug_line(f" -- -- -- The messages are: {messages}.", "yellow")
+
+            completion = client.chat.completions.create(
+                model="llama3-8b-8192",
+                messages=messages
+            )
+
+            print_debug_line(f" -- -- -- The completion is: {completion}.", "yellow")
+
+            response = completion.choices[0].message
+            content = response.content
+
+            # Insert the conversation information into the database.
+            new_conv_id = sql("""INSERT INTO groq_conversations SET 
+                conv_id = %s,
+                conv_type_id = %s, 
+                conv_first_msg = %s, 
+                conv_last_msg = %s, 
+                conv_summary = %s;""", (conv_id['conv_id'], 0, str(conv_id['conv_first_msg']), str(conv_id['conv_last_msg']), content))
+
+            
+
+            return jsonify({
+                "message": "success", 
+                "response": content,
+                "conv_id": new_conv_id,
+            })
+            # exit(0)
+
+        
+
+
+
+
+
 
 def check_for_tapestry_memories():
 
@@ -365,9 +495,24 @@ def check_for_tapestry_memories():
         print_debug_line(f" -- The current date is `earliest_date`: {earliest_date}.", "blue")
 
         # Get the individual conversations (conv_id = 0) from the DB for the current date.
-        conv_summaries = sql("SELECT * FROM groq_conversations LEFT JOIN groq_conv_types USING(conv_type_id) WHERE conv_type_id = 0 AND DATE(conv_first_msg) = %s;", (earliest_date, ))
+        conv_summaries = sql("""SELECT DISTINCT conv_id, MIN(DATE(msg_created)) AS conv_msg_created, MIN(msg_created) AS conv_first_msg, MAX(msg_created) AS conv_last_msg
+            FROM groq_messages 
+            WHERE groq_messages.conv_id NOT IN (
+                SELECT groq_conversations.conv_id 
+                FROM groq_conversations
+            )
+            GROUP BY conv_id
+            HAVING MIN(DATE(msg_created)) = %s
+            ORDER BY msg_created;""", (earliest_date, ))
 
         print_debug_line(f" -- -- There are { len(conv_summaries) } summaries for this day.", "blue")
+
+        if len(conv_summaries) == 0:
+            print_debug_line(f" -- -- There are no summaries for this day. So, we will create some.", "red")
+            return generate_new_conversational_summaries(earliest_date)
+            exit(0)
+            
+
 
         # If there are messages for the current date, then loop through them.
         for conv in conv_summaries:
@@ -505,9 +650,18 @@ def get_tapestry_memories(before_date = None):
     memories = []
 
     # We need to go through the dates from the beginning of time in our database.
-    sql_call = "SELECT * FROM groq_conversations LEFT JOIN groq_conv_types USING(conv_type_id) WHERE 1 = 1 " + sql_addon + " ;"
+    str_sql = "SELECT * FROM groq_conversations LEFT JOIN groq_conv_types USING(conv_type_id) WHERE 1 = 1 " + sql_addon + " ;"
+    sql_earliest_date = sql(str_sql)
     
-    earliest_date = sql(sql_call)[0]["conv_first_msg"].strftime("%Y-%m-%d")
+    conv_length = len(sql_earliest_date)
+    print_debug_line(f" -- -- There are { conv_length } memories in the database.", "cyan")
+
+    if conv_length > 0:
+        print_debug_line(f" -- -- There are { conv_length } memories in the database.", "cyan")
+        earliest_date = str(sql_earliest_date[0]["conv_first_msg"].strftime("%Y-%m-%d"))
+    else:
+        return False
+    
     print_debug_line(f"`earliest_date`: {earliest_date}.", "green")
 
     # Get today's date in UTC in "YYYY-MM-DD" format

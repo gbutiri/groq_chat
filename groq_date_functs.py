@@ -42,3 +42,6 @@ def get_first_sunday_of_month(str_first_of_month):
     first_of_month = datetime.strptime(str_first_of_month, "%Y-%m-%d")
     first_sunday = first_of_month + timedelta(days=(6 - first_of_month.weekday()))
     return str(first_sunday.strftime("%Y-%m-%d"))
+
+def get_todays_date():
+    return str(datetime.now().strftime("%Y-%m-%d"))

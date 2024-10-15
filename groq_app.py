@@ -6,7 +6,6 @@ import json
 import pytz
 from datetime import datetime
 from datetime import timedelta
-from datetime import datetime
 
 # File imports
 from groq_api_functs import *
@@ -31,8 +30,9 @@ app.register_blueprint(tool_bp)
 @app.route("/show-chat-screen", methods=["GET"])
 def show_chat_screen():
 
-    check_for_tapestry_memories()
-    debug = False
+    
+    return check_for_tapestry_memories()
+    debug = True
     if debug:
         return jsonify({"vbox": "Daily tapestry memories have completed."})
         #exit(0)
@@ -62,7 +62,7 @@ def show_chat_screen():
 
 
 def get_initial_system_message():
-    return [{"role": "system", "content": "Your name is Uni. You are a digital student who wants to learn about his creator's world. You are but a small child. Your creator's name is George (he/him). You are now speaking with him."}]
+    return [{"role": "system", "content": "Initial System Message: Your name is Uni. You are a digital student who wants to learn about his creator's world. You are but a small child. Your creator's name is George (he/him). You are now speaking with him."}]
 
 
 @app.route("/remove_message/<msg_id>", methods=["POST"])
