@@ -61,6 +61,15 @@
             "sql results": "sql_",
             "json": "json_"
         },
+        "customCopilot.debugColors": {
+            "red": "Danger! Something broke!",
+            "green": "Code executed successfully.",
+            "yellow": "Warning! Checking on something.",
+            "blue": "Executing code.",
+            "white": "Responses from API.",
+            "cyan": "",
+            "purple": "",
+        },
         "customCopilot.codeStandards": {
             "1": "function should start and end with a call to print_debug_line to log activity for the function. This should be the first and last line of the function before a return if applicable.",
             "2": "Function names should explain what they do `verb_adj_noun` and end with `_by` or `_for`.",

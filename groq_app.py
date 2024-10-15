@@ -14,7 +14,7 @@ from groq_tool_routes import *
 from groq_protocols import *
 from groq_date_functs import *
 from groq_msg_functs import *
-from groq_tapestry import *
+from groq_tapestry2 import *
 
 
 # Initialize the Flask app
@@ -31,12 +31,6 @@ app.register_blueprint(tool_bp)
 def show_chat_screen():
 
     
-    return check_for_tapestry_memories()
-    debug = True
-    if debug:
-        return jsonify({"vbox": "Daily tapestry memories have completed."})
-        #exit(0)
-
     messages_sql = sql("""SELECT * FROM groq_messages 
         WHERE conv_id = 0 
         ORDER BY msg_created, msg_id;""")
@@ -44,13 +38,14 @@ def show_chat_screen():
     total_tokens = 0
 
     # Fetch memories from the database
-    memories = get_tapestry_memories()
+    str_memories = load_tapestry_string()
+
+    memories = load_tapestry()
 
     # Reverse the records to show the most recent first.
     memories.reverse()
 
-    for mem in memories:
-        total_tokens += get_token_count(mem['conv_summary'])
+    total_tokens += get_token_count(str_memories)
 
     
     for msg in messages_sql:
@@ -94,30 +89,36 @@ def send_groq_chat():
         WHERE conv_id = 0 
         ORDER BY msg_created, msg_id;""")
     
+    messages = []
+
     # If we don't have any messages in the database, we need to insert the initial system message in the DB.
     if not messages_sql:
         # Include the time, date and system status in the initial system message.
-        get_system_status_message = get_initial_system_messages()['content'] + "\n\nThis is the first message in this current conversation. The conversation has started here. The memrories before happened before this moment. The conversation is now active."
+        str_system_status_message = get_initial_system_messages()['content'] + "\n\nThe memories will load next. The conversation will be active when the memories have completed loading. Disregard any tool or function calls made before the memories finish."
+
+        # Add initial system message for AI.
+        messages.append({
+            "role": "system",
+            "content": str_system_status_message
+        })
 
         sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content)
-            VALUES (0, 'system', %s);""", (get_system_status_message, ))
+            VALUES (0, 'system', %s);""", (str_system_status_message, ))
 
     messages_data = sql("""SELECT * FROM groq_messages 
         WHERE conv_id = 0 
         AND msg_role != 'tool'
         ORDER BY msg_created, msg_id;""")
 
-    # Add initial system message for AI.
-    messages = get_initial_system_message()
 
     # Bring in the summaries.
     messages.append({
         "role": "system",
-        "content": "Here are the summaries of the conversations we've had so far. Some of the memories are individual ones, some are daily, some are weekly. They are all part of the same story.",
+        "content": "Here are the memories of the conversations we've had so far. Some of the memories are individual ones, some are daily, some are weekly. They are all part of the same story. Your story.",
     })
 
     # Summaries from the DB.
-    summaries = get_tapestry_memories()
+    summaries = load_tapestry()
     summary_token_count = 0
 
     for summary in summaries:
@@ -186,6 +187,9 @@ def send_groq_chat():
 
 # Api Call and Tool Detection.
 def chat_completion(messages):
+
+    print_debug_line(f" -- The messages are: { messages }.", "green")
+
     # print(os.environ.get("GROQ_API_KEY"))
     client = Groq(
         api_key=os.environ.get("GROQ_API_KEY"),
@@ -193,7 +197,8 @@ def chat_completion(messages):
 
     try:
         # Get the tools to use
-        tools = get_tools()
+        # tools = get_tools()
+        tools = []
 
         completion = client.chat.completions.create(
             messages=messages,
@@ -335,7 +340,7 @@ def chat_completion(messages):
 @app.route("/summarize_conversation", methods=["POST"])
 def summarize_conversation():
 
-    memories = get_tapestry_memories()
+    memories = load_tapestry()
 
     conv_id = 0
     total_tokens = 0
