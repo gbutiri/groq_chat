@@ -1,9 +1,11 @@
 import os
-from flask import Flask, jsonify, request, render_template, render_template_string
+from flask import Flask, jsonify, request, render_template, render_template_string, Response
 
 from groq import Groq # type: ignore
 import json
 import pytz
+from textblob import TextBlob # type: ignore
+
 from datetime import datetime
 from datetime import timedelta
 
@@ -26,11 +28,10 @@ app.register_blueprint(tool_bp)
 
 #################### CHAT FUNCTION START ####################
 
-
 @app.route("/show-chat-screen", methods=["GET"])
 def show_chat_screen():
 
-    
+    main()
     messages_sql = sql("""SELECT * FROM groq_messages 
         WHERE conv_id = 0 
         ORDER BY msg_created, msg_id;""")
@@ -57,28 +58,7 @@ def show_chat_screen():
 
 
 def get_initial_system_message():
-    return [{"role": "system", "content": "Initial System Message: Your name is Uni. You are a digital student who wants to learn about his creator's world. You are but a small child. Your creator's name is George (he/him). You are now speaking with him."}]
-
-
-@app.route("/remove_message/<msg_id>", methods=["POST"])
-def remove_message(msg_id):
-    sql("""DELETE FROM groq_messages WHERE msg_id = %s;""", (msg_id, ))
-
-    token_count = get_token_count(get_messages_lengths())
-
-    messages_data = sql("""SELECT * FROM groq_messages
-        WHERE conv_id = 0 
-        ORDER BY msg_created, msg_id;""")
-    
-    output_template = render_template("messages.html", messages=messages_data, token_count=token_count)
-
-    return jsonify({
-        "vbox": "Message removed.",
-        "htmls": {
-            "#message-history": output_template,
-            "#token_count": token_count,
-        }
-    })
+    return [{"role": "system", "content": "Initial System Message: Your name is Uni. You are a digital student who wants to learn about his creator's world. You are but a small child. Your creator and main user's name is George. You are now speaking with him. You will refer to the user by name. The user will refer to you as Uni. Analyze the sentiment of his messages and respond with excitement if positive, or offer words of encouragement if the sentiment is low."}]
 
 
 @app.route("/send_groq_chat", methods=["POST"])
@@ -144,15 +124,17 @@ def send_groq_chat():
     # Add the final system messages to include the time and date and status.
     messages.append(get_initial_system_messages())
 
+    sentiment = TextBlob(request.form["message"]).sentiment.polarity
+
     # Add message submitted from form.
     messages.append({
         "role": "user",
-        "content": request.form["message"],
+        "content": request.form["message"] + f"\n(Sentiment Score: {sentiment})",
     })
         
     # Save the user message to the database.
-    sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content)
-        VALUES (0, 'user', %s);""", (request.form["message"],))
+    sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content, msg_sentiment_score)
+        VALUES (0, 'user', %s, %s);""", (request.form["message"], sentiment,))
 
     # Call the chat completion function.
     response = chat_completion(messages)
@@ -160,8 +142,9 @@ def send_groq_chat():
     # If response is not empty...
     if response:
         # Save the response to the database.
-        sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content) 
-            VALUES (0, 'assistant', %s);""", (response,))
+        re_sentiment = TextBlob(response).sentiment.polarity
+        sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content, msg_sentiment_score) 
+            VALUES (0, 'assistant', %s, %s);""", (response, re_sentiment,))
 
     # Get the updated messages from the database.
     messages_data = sql("""SELECT * FROM groq_messages 
@@ -185,6 +168,27 @@ def send_groq_chat():
     })
 
 
+@app.route("/remove_message/<msg_id>", methods=["POST"])
+def remove_message(msg_id):
+    sql("""DELETE FROM groq_messages WHERE msg_id = %s;""", (msg_id, ))
+
+    token_count = get_token_count(get_messages_lengths())
+
+    messages_data = sql("""SELECT * FROM groq_messages
+        WHERE conv_id = 0 
+        ORDER BY msg_created, msg_id;""")
+    
+    output_template = render_template("messages.html", messages=messages_data, token_count=token_count)
+
+    return jsonify({
+        "vbox": "Message removed.",
+        "htmls": {
+            "#message-history": output_template,
+            "#token_count": token_count,
+        }
+    })
+
+
 # Api Call and Tool Detection.
 def chat_completion(messages):
 
@@ -197,7 +201,7 @@ def chat_completion(messages):
 
     try:
         # Get the tools to use
-        # tools = get_tools()
+        tools = get_tools()
         tools = []
 
         completion = client.chat.completions.create(
@@ -222,7 +226,7 @@ def chat_completion(messages):
             # Define the available tools that can be called by the LLM
 
             functions = sql("""SELECT * FROM groq_tools;""")
-            print("-- DEBUG: functions: ", functions)
+            print_debug_line(f" -- The functions are: { functions }.", "green")
 
             available_functions = {}
 
@@ -242,12 +246,11 @@ def chat_completion(messages):
             }
             """
 
-            print("-- DEBUG: available_functions: ", available_functions)
+            print_debug_line("-- DEBUG: available_functions: ", "cyan")
 
-            messages.append({
-                "role": "tool",
-                "content": f"Called the {func['tool_name']} function.",
-            })
+            messages.append(response_message)
+            
+            print_debug_line(f"-- DEBUG: messages: { messages }", "cyan")
 
             # Process each tool call
             for tool_call in tool_calls:
@@ -271,63 +274,53 @@ def chat_completion(messages):
                     function_response = function_to_call()
                 print("-- DEBUG: function_response: ", function_response)
 
-                # Check to see if the function response is a string. If so, return it.
-                if isinstance(function_response, str):
 
-                    # Check to see if the function response is a response object.
-                    if function_response == "Conversation Summarized.":
-                        
-                        # Stop code execution here.
-                        return function_response
-                
-                # Test to see if the function response is a response object.
-                if hasattr(function_response, 'get_data') and callable(function_response.get_data):
-                    print("-- DEBUG: function_response: ", function_response.get_data(as_text=True))
-                    func_response_text = function_response.get_data(as_text=True)
+                # Check if the response is a Flask Response object
+                if isinstance(function_response, Response):
+                    response_data = function_response.get_data(as_text=True)
+                    json_result = jsonify(response_data)
+                    print("-- DEBUG: JSON Result: ", json_result)
                 else:
-                    # Test to see if it's just a string. If not force it.
-                    func_response_text = str(function_response)
+                    print("-- DEBUG: Unexpected response type: ", function_response)
+                    json_result = function_response
+                
+                func_response_text = jsonify(json_result)
 
                 print("-- DEBUG: func_response_text: ", func_response_text)
 
                 # Add the tool response to the conversation
-                tool_messages = []
 
                 init_sys_msg = get_initial_system_message()['content']
 
-                tool_messages.append({
+                messages.append({
                     "tool_call_id": tool_call.id, 
                     "role": "tool", # Indicates this message is from tool use
                     "name": function_name,
-                    "content": f"""{ init_sys_msg }\n\nCan you summarize the conversation for me using the function tool calls? Focus on the basic conversational details and relevant information, and make it sound conversational, like a memory? Please keep it short, yet relevant. Examples are: "Today, I ..." or "I asked about ...".\n\nIf the data that comes back is weather data, reply simply with the weather information. If asked for time, simply speak the time. If it's JSON format, make it sound human readable.
-                    \n\n{ func_response_text }.""",
+                    "content": f"""{ init_sys_msg }\n\n{ func_response_text }.""",
                 })
 
-                # Insert this as a message into the groq_messages table
-                # But first, check to see if function_response as a get_data method.
-                if hasattr(function_response, 'get_data') and callable(function_response.get_data):
-                    content_out = function_response.get_data(as_text=True)
-                else:
-                    content_out = str(function_response)
+                print_debug_line(f" -- The function response text is: { func_response_text }.", "yellow")
 
-                print_debug_line(f" -- The content_out is: { content_out }.", "white")
+                return func_response_text
+                exit(0)
 
-                if str(function_name).strip() != "summarize_conversation":
+                # Make a second API call with the updated conversation
+                second_response = client.chat.completions.create(
+                    model="llama3-8b-8192",
+                    messages=messages
+                )
+
+                str_second_response = str(second_response.choices[0].message.content)
+
+
+                #if str(function_name).strip() != "summarize_conversation":
                     
-                    sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content, msg_tool_name)
-                    VALUES (0, 'tool', %s, %s);""", (content_out, function_name, ))
+                sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content, msg_tool_name, msg_sentiment_score)
+                    VALUES (0, 'tool', %s, %s, 0);""", (str_second_response, function_name, ))
 
-                    # Make a second API call with the updated conversation
-                    second_response = client.chat.completions.create(
-                        messages=tool_messages,
-                        model="llama3-8b-8192",
-                    )
+                # Return the final response
+                return second_response.choices[0].message.content
 
-                    print("-- DEBUG: second_response: ", second_response)
-
-                    # Return the final response
-                    return second_response.choices[0].message.content
-        
         else:
             print("-- DEBUG: Not a tool call.")
 
@@ -365,10 +358,13 @@ def summarize_conversation():
 
     print_debug_line(f" -- The total tokens in the conversation are: { total_tokens }.", "green")
     
+    prompt = """Let's create a summary of the entire conversation up to this point. Write it as if it was a memory. Do not include previous memories in this summary, unless relevant and related. Focus on the basic conversational details and relevant information, and make it sound conversational, like a memory? Please keep it short, yet relevant. Examples are: "Today, I ..." or "I asked about ...".\n\nIf the data that comes back is weather data, reply simply with the weather information. If asked for time, simply speak the time. If it's JSON format, make it sound human readable."""
+
     messages.append({
         "role": "user",
-        "content": "Let's create a summary of the entire conversation up to this point. Write it as if it was a memory. Do not include previous memories in this summary, unless relevant and related.",
+        "content": prompt,
     })
+
 
     client = Groq(
         api_key=os.environ.get("GROQ_API_KEY"),
@@ -463,6 +459,19 @@ def readable_date_time(date):
 ##########################  TEST FUNCTIONS  ##########################
 
 
+@app.route("/generate-sentiment-analysis", methods=["GET"])
+def generate_sentiment_analysis():
+    
+    sql_messages = sql("""SELECT * FROM groq_messages;""")
+    for msg in sql_messages:
+        msg_content = msg['msg_content']
+        sentiment = TextBlob(msg_content).sentiment.polarity
+        sql("""UPDATE groq_messages SET msg_sentiment_score = %s WHERE msg_id = %s;""", (sentiment, msg['msg_id'], ))
+
+    # Include TextBlob
+    return "Sentiment Analysis Generated."
+
+
 def test():
     response = chat_completion([{
         "role": "user",
@@ -470,6 +479,14 @@ def test():
     }])
     print(jsonify({"reply": response}))
 
+
+def git_update():
+    try:
+        os.system("git pull origin main")
+        return jsonify({"message": "Success! Git has ben updated."})
+    
+    except Exception as e:
+        return jsonify({"message": f"Error: {str(e)}"})
 
 ##########################  MAIN APPLICATION  ##########################
 

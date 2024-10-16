@@ -48,7 +48,7 @@ def main():
     i_date = start_date
 
     # 3. Start the loop
-    while i_date < todays_date:
+    while i_date <= todays_date:
 
         ### THIS IS WHERE WE PUT OUR MAIN ROUTINE CALLING FUNCTIONS FROM AROUND THE SYSTEM ###
 
@@ -69,7 +69,7 @@ def main():
         i_date = (datetime.strptime(i_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
 
     # Testing. So, we're stopping the execution.
-    return jsonify({"vbox": "First test for weekly completed."})
+    return jsonify({"vbox": "First test completed."})
 
 ### MAIN END ###
 
@@ -83,7 +83,7 @@ def check_conversational_summaries(i_date):
 
     # 1. Check for `messages` from `i_date`.
     # 2. Group `messages` by `conv_id`.
-    sql_messages = sql("""SELECT conv_id FROM groq_messages GROUP BY conv_id HAVING DATE(MIN(msg_created)) = %s""", (i_date, ))
+    sql_messages = sql("""SELECT conv_id FROM groq_messages WHERE conv_id != 0 GROUP BY conv_id HAVING DATE(MIN(msg_created)) = %s""", (i_date, ))
 
     new_conv_id = False
 
@@ -134,7 +134,7 @@ def create_conversational_summary(conv_id):
 
     messages.append({
         "role": "system",
-        "content": load_tapestry()
+        "content": load_tapestry_string()
     })
     messages.append({
         "role": "system",
@@ -165,7 +165,7 @@ def create_conversational_summary(conv_id):
     conversational_summary = call_api_for_level_summary(messages)
 
     # 3. Save the `conversational_summary` to the database.
-    new_conv_id = sql("""INSERT INTO groq_conversations (conv_id, conv_type_id, conv_summary, conv_first_msg, conv_last_msg) VALUES (%s, 0, %s, %s, %s)""", (conv_id, conversational_summary, sql_messages[0]['msg_created'], sql_messages[-1]['msg_created']))
+    new_conv_id = sql("""INSERT INTO groq_conversations (conv_id, conv_type_id, conv_summary, conv_first_msg, conv_last_msg) VALUES (%s, 0, %s, %s, %s)""", (conv_id, conversational_summary, sql_messages[0]['msg_created'], sql_messages[-1]['msg_created'], ))
     print_debug_line(f" -- Conversation restored for `conv_id`: {new_conv_id}.", "green")
     
     return new_conv_id
@@ -182,8 +182,10 @@ def check_daily_summary(i_date):
     
     sql_daily_summaries = sql("""SELECT * FROM groq_conversations WHERE DATE(conv_first_msg) = %s AND conv_type_id = 1""", (i_date, ))
 
+    todays_date = get_todays_date()
+
     # 2. If no `daily_summaries`, `create_daily_summary(i_date)`.
-    if not sql_daily_summaries:
+    if not sql_daily_summaries and i_date < todays_date:
         print_debug_line(f" -- No daily summary found for `i_date`: {i_date}. Attempting to create one now.", "yellow")
         create_daily_summary(i_date)
 
@@ -211,7 +213,7 @@ def create_daily_summary(i_date):
         messages = []
         messages.append({
             "role": "system",
-            "content": load_tapestry()
+            "content": load_tapestry_string()
         })
         messages.append({
             "role": "system",
@@ -325,7 +327,7 @@ def create_weekly_summary(i_date):
         messages = []
         messages.append({
             "role": "system",
-            "content": load_tapestry()
+            "content": load_tapestry_string()
         })
         messages.append({
             "role": "system",
@@ -442,7 +444,7 @@ def get_tapestry(end_date = None):
         end_date = get_todays_date()
 
     tapestry = load_tapestry(end_date)
-    
+
     return jsonify({"tapestry": tapestry})
 
 
@@ -479,11 +481,13 @@ def load_tapestry(end_date = None):
     i_date = start_date
 
     while i_date <= end_date:
-        print_debug_line(f" -- f`load_tapestry` The start date is `i_date`: {i_date}.", "white")
+        print_debug_line(f" -- Starting the loop iteration for `i_date`: {i_date}.", "blue")
         
         # Check for monthly summaries for the first of previous month.
         first_of_month = get_first_of_month(i_date)
         first_of_previous_month = (datetime.strptime(first_of_month, "%Y-%m-%d") - relativedelta(months=1)).strftime("%Y-%m-%d")
+        print_debug_line(f" -- The first of the month is `first_of_month`: {first_of_month}.", "cyan")
+        print_debug_line(f" -- The first of the previous month is `first_of_previous_month`: {first_of_previous_month}.", "cyan")
 
         # Check for montly summaries for this date.
         existing_monthly_summary = sql("SELECT * FROM groq_conversations LEFT JOIN groq_conv_types USING(conv_type_id) WHERE conv_type_id = 3 AND DATE(conv_first_msg) = %s;", (first_of_month, ))
@@ -501,6 +505,7 @@ def load_tapestry(end_date = None):
                 "conv_type_name": existing_monthly_summary[0]['conv_type_name'],
                 "conv_first_msg": existing_monthly_summary[0]['conv_first_msg'],
                 "conv_last_msg": existing_monthly_summary[0]['conv_last_msg'],
+                "conv_type_color": existing_monthly_summary[0]['conv_type_color'],
 
             })
 
@@ -535,6 +540,7 @@ def load_tapestry(end_date = None):
                 "conv_type_name": existing_weekly_summary[0]['conv_type_name'],
                 "conv_first_msg": existing_weekly_summary[0]['conv_first_msg'],
                 "conv_last_msg": existing_weekly_summary[0]['conv_last_msg'],
+                "conv_type_color": existing_weekly_summary[0]['conv_type_color'],
             })
                 
 
@@ -548,7 +554,7 @@ def load_tapestry(end_date = None):
         print_debug_line(f" -- `i_date` is: {i_date}.", "cyan")
 
         # Check for daily summaries for this date.
-        existing_daily_summary = sql("SELECT * FROM groq_conversations WHERE conv_type_id = 1 AND DATE(conv_first_msg) = %s;", (i_date, ))
+        existing_daily_summary = sql("SELECT * FROM groq_conversations LEFT JOIN groq_conv_types USING(conv_type_id) WHERE conv_type_id = 1 AND DATE(conv_first_msg) = %s;", (i_date, ))
 
         if len(existing_daily_summary) > 0 and i_date < end_date:
             # If there is a daily summary, we add it to the tapestry.
@@ -562,6 +568,7 @@ def load_tapestry(end_date = None):
                 "conv_type_name": existing_daily_summary[0]['conv_type_name'],
                 "conv_first_msg": existing_daily_summary[0]['conv_first_msg'],
                 "conv_last_msg": existing_daily_summary[0]['conv_last_msg'],
+                "conv_type_color": existing_daily_summary[0]['conv_type_color'],
             })
                 
 
@@ -574,20 +581,26 @@ def load_tapestry(end_date = None):
 
         # Check for conversational summaries for this date.
         sql_conv_summaries = sql("""SELECT * FROM groq_conversations LEFT JOIN groq_conv_types USING(conv_type_id) WHERE DATE(conv_first_msg) = %s""", (i_date, ))
+        print_debug_line(f" -- The conversational summaries for `i_date`: {i_date} are `sql_conv_summaries`: {sql_conv_summaries}.", "cyan")
 
         if len(sql_conv_summaries) > 0 and i_date <= end_date:
             # If there are messages for today, we grab the conversational summary.
             print_debug_line(f" -- There are conversational summaries for {i_date}.", "cyan")
-            str_conversational_summary = sql_conv_summaries[0]['conv_summary']
 
-            lst_tapestry_ouput.append({
-                "content": f"[{i_date}] - Conversational memory:\n{str_conversational_summary}",
-                "conv_id": sql_conv_summaries[0]['conv_id'],
-                "conv_summary": sql_conv_summaries[0]['conv_summary'],
-                "conv_type_name": sql_conv_summaries[0]['conv_type_name'],
-                "conv_first_msg": sql_conv_summaries[0]['conv_first_msg'],
-                "conv_last_msg": sql_conv_summaries[0]['conv_last_msg'],
-            })
+            for conv_summary in sql_conv_summaries:
+                print_debug_line(f" -- The conversational summary for `conv_summary['conv_id']`: {conv_summary['conv_id']}.", "cyan")
+
+                str_conversational_summary = conv_summary['conv_summary']
+
+                lst_tapestry_ouput.append({
+                    "content": f"[{i_date}] - Conversational memory:\n{str_conversational_summary}",
+                    "conv_id": conv_summary['conv_id'],
+                    "conv_summary": conv_summary['conv_summary'],
+                    "conv_type_name": conv_summary['conv_type_name'],
+                    "conv_first_msg": conv_summary['conv_first_msg'],
+                    "conv_last_msg": conv_summary['conv_last_msg'],
+                    "conv_type_color": conv_summary['conv_type_color'],
+                })
                 
 
             # Increment by one day.
@@ -595,9 +608,14 @@ def load_tapestry(end_date = None):
 
             continue
 
+        else:
+            #pass
+            # If we get here, we're at the end. We have no memories for this day. We increment by one day.
+            i_date = (datetime.strptime(i_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+
         # If we get here, we're at the end. We have no memories for this day. We increment by one day.
 
-        i_date = (datetime.strptime(i_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+        # i_date = (datetime.strptime(i_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
 
     print_debug_line(f" -- The tapestry output is `lst_tapestry_ouput`: {lst_tapestry_ouput}.", "green")
 
