@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Window</title>
+    <!--<link rel="stylesheet" href="/static/bootstrap-5.3.2/css/bootstrap.min.css" />-->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="/static/fontawesome-pro-5.15.4/css/all.min.css" />
+    <script src="/static/jquery-3.7.1/jquery-3.7.1.min.js"></script>
+    <script src="/static/autosize.min.js"></script>
+    <script src="/static/dispatch.js"></script>
+    <link rel="stylesheet" href="/static/dispatch.css">
+    <link rel="stylesheet" href="/static/main.css">
+</head>
+<body class="my-3">
+    <div class="container">
+
+        <div class="row">
+            <div class="col-3">
+                <div class="border border-5 border-primary-subtle rounded-4 margin-3 p-2 bg-primary bg-gradient bg-opacity-25">
+                    <h1 class="h3"><i class="fad fa-i-cursor"></i><span class="opacity-75">n</span><span class="opacity-50">k</span><span class="opacity-25">y</span></h1>
+                    <h2 class="h4">Projects</h2>
+                    <p>What would you like to create?</p>
+                    {% include 'inky-project-types.html' %}
+                    
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="border border-5 border-warning-subtle rounded-4 margin-3 p-2 bg-warning bg-gradient bg-opacity-25">
+                    <div>Go back to: <a href="/show-chat-screen">Chat with Uni</a></div>
+                    <div class="" id="middle_column">
+
+                        {% include 'inky-project-list.html' %}
+
+                        
+                    </div>
+                </div>
+                
+            </div>
+            <div class="col-3">
+                <div class="chat-window border border-5 border-success-subtle rounded-4 margin-3 p-2 bg-success bg-gradient bg-opacity-25">
+                    <div class="message-history" id="message-history">
+                        {% include 'messages.html' %}
+                        [This is where the chat messages go to refine the book, bible, or other text.]
+                    </div>
+                    
+                    <div class="new-message">
+                        <div>
+                            tokens: <span id="token_count">{{ total_tokens }}</span>
+                            <a href="#" class="tmbtn" data-module="summarize_conversation" data-action="">summarize</a>
+                        </div>
+                        <form class="ajaxform" data-module="send_groq_chat" data-action="">
+                            <div class="input-group">
+                                <textarea class="autosize form-control" name="message" id="message" placeholder="Type your message here..."></textarea>
+                                
+                                <button class="btn btn-success" type="submit">Send</button>
+                                
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+                    
+    </div>
+    <script type="text/javascript">
+        function scrollToTheTop() {
+            $("#message-history").animate({
+                scrollTop: $(document).find('#message-history').get(0).scrollHeight
+            }, 500);
+        }
+        $(document).ready(function(){
+
+            autosize($("textarea.autosize"));
+            scrollToTheTop();
+
+            $("#menu_toggle").click(function(){
+                $("#memories").slideLeft();
+            });
+        });
+    </script>
+
+</body>
+</html>

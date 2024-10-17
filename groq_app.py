@@ -17,6 +17,7 @@ from groq_protocols import *
 from groq_date_functs import *
 from groq_msg_functs import *
 from groq_tapestry2 import *
+from groq_inky import *
 
 
 # Initialize the Flask app
@@ -112,6 +113,36 @@ def send_groq_chat():
         })
         summary_token_count += get_token_count(content)
 
+    # Time to load up likes and dislikes.
+    user_likes = sql("""SELECT * FROM groq_user_sentiment WHERE sent_user = 'user' ORDER BY sent_created;""")
+    print_debug_line(f" -- The user likes are: { user_likes }.", "blue")
+
+    assistant_likes = sql("""SELECT * FROM groq_user_sentiment WHERE sent_user = 'assistant' ORDER BY sent_created;""")
+    print_debug_line(f" -- The assistant likes are: { assistant_likes }.", "cyan")
+
+    # Load up the likes and dislikes.
+    str_user_likes = []
+    for like in user_likes:
+        str_user_likes.append(f"[{like['sent_created']}] - {like['sent_subject']} - Sentiment Score: {like['sent_score']}")
+
+    str_assistant_likes = []
+    for like in assistant_likes:
+        str_assistant_likes.append(f"[{like['sent_created']}] - {like['sent_subject']} - Sentiment Score: {like['sent_score']}")
+
+    # Load up the likes and dislikes.
+    str_user_likes = "\n\n".join(str_user_likes)
+    print_debug_line(f" -- The user likes are: { str_user_likes }.", "blue")
+    messages.append({
+        "role": "system",
+        "content": f"""This is the likes and dislikes section of your memories. Here are the likes and dislikes from the user:\n{ str_user_likes }""",
+    })
+
+    str_assistant_likes = "\n\n".join(str_assistant_likes)
+    print_debug_line(f" -- The assistant likes and dislikes are as follows: { str_assistant_likes }.", "cyan")
+    messages.append({
+        "role": "system",
+        "content": f"""Here are the likes and dislikes from the assistant:\n{ str_assistant_likes }\n\nThe likes and dislikes are part of the memories. They are part of the story. Now, let's get to the conversation.""",
+    })
 
     print("-- DEBUG: messages: ", messages)
 
@@ -138,6 +169,13 @@ def send_groq_chat():
 
     # Call the chat completion function.
     response = chat_completion(messages)
+
+    if response == False:
+        return jsonify({
+            "redirect": "/show-chat-screen",
+        })
+
+    print_debug_line(f" -- The response is: { response }.", "yellow")
 
     # If response is not empty...
     if response:
@@ -189,6 +227,210 @@ def remove_message(msg_id):
     })
 
 
+
+
+
+
+@app.route("/show-inky", methods=["GET"])
+def show_inky():
+
+    # This is where we load up the initial data once we create it. It's a desktop for making documents.
+    project_types = get_all_inky_project_types()
+    projects = get_all_inky_projects()
+
+    return render_template("inky.html", project_types=project_types, projects=projects)
+
+
+@app.route("/inky/create-new-project/<proj_type_id>", methods=["POST"])
+def create_new_project(proj_type_id):
+
+    # This is going to replace the middle column with the project creation form.
+    proj_type = sql("""SELECT * FROM inky_project_types WHERE proj_type_id = %s;""", (proj_type_id, ))[0]
+    
+    output =  render_template(f"inky-create-project-form.html", proj_type=proj_type)
+
+    return jsonify({
+        "htmls": {
+            "#middle_column": output,
+        }
+    })
+
+
+@app.route("/inky/close-form", methods=["POST"])
+def close_form():
+
+    projects = get_all_inky_projects()
+
+    output = render_template("inky-project-list.html", projects=projects)
+
+    return jsonify({
+        "htmls": {
+            "#middle_column": output,
+        }
+    })
+
+@app.route("/inky/create-project-description", methods=["POST"])
+def inky_create_project_description():
+
+    project_title = request.form.get("project_title")
+    project_genre = request.form.get("project_genre")
+
+    
+
+    errors = {}
+
+    if not project_title:
+        errors["#err_project_title"] = "Please enter a project title."
+
+    if not project_genre:
+        errors["#err_project_genre"] = "Please select a project genre."
+
+
+    if errors:
+        return jsonify({
+            "htmls": errors
+        })
+    
+    # Now we generate a message list:
+
+    messages = []
+    messages.append({
+        "role": "user",
+        "content": f"""I would like to create a new novel. The title is "{ project_title }". The genre is "{ project_genre }". Gereate a new summary for this novel. Do not include the title or genre in the description. Simply return the description of the novel.""",
+    })
+
+    # Then we call the API with this data.
+
+    client = Groq(
+        api_key=os.environ.get("GROQ_API_KEY"),
+    )
+
+    response = client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=messages
+    )
+
+    str_second_response = str(response.choices[0].message.content)
+
+    return jsonify({
+        "htmls": {
+            "#project_description": str_second_response,
+        },
+        "js": ";autosize.update($('textarea.autosize'));"
+
+    })
+    
+    
+
+
+@app.route("/inky/create-project-idea", methods=["POST"])
+def inky_create_project_idea():
+
+    # Let's get the form data first.
+    project_title = request.form.get("project_title")
+    errors = {}
+
+    if not project_title:
+        errors["#err_project_title"] = "Please enter a project title."
+        
+
+    project_genre = request.form.get("project_genre")
+
+    if not project_genre:
+        errors["#err_project_genre"] = "Please select a project genre."
+    
+    project_descr = request.form.get("project_descr")
+
+    if not project_descr:
+        errors["#err_project_descr"] = "Please enter a project description."
+
+    if errors:
+        return jsonify({
+            "htmls": errors
+        })
+    
+
+    # Now we generate a message list:
+    messages = []
+    messages.append({
+        "role": "user",
+        "content": f"""I would like to create a new novel. The title is "{ project_title }". The genre is "{ project_genre }". The description is { project_descr }. Gereate a new book bible for this book. Contain all of the necessary elements of a book bible for this novel. Only return the book bible information. Do not include the title, genre, or description in the book bible. Properly format the bible's output using the correct elements.""",
+    })
+
+    # Then we call the API with this data.
+    client = Groq(
+        api_key=os.environ.get("GROQ_API_KEY"),
+    )
+    response = client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=messages
+    )
+
+    str_second_response = str(response.choices[0].message.content)
+
+
+    # Then we output the response.
+    return jsonify({
+        "htmls": {
+            "#project_idea_output": str_second_response,
+        }
+    })
+
+
+@app.route("/inky/generate_novel_title", methods=["POST"])
+def generate_novel_title():
+
+    messages = []
+    messages.append({
+        "role": "user",
+        "content": "I would like you to generate just a title for a novel of a radom genre. Just return the title of the novel. Nothing else, please.",
+    })
+
+    client = Groq(
+        api_key=os.environ.get("GROQ_API_KEY"),
+    )
+    response = client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=messages
+    )
+
+    str_second_response = str(response.choices[0].message.content)
+
+    return jsonify({
+        "values": {
+            "#project_title": str_second_response,
+            "#project_title_2": str_second_response,
+        }
+    })
+
+
+@app.route("/inky/generate_novel_description", methods=["POST"])
+def generate_novel_description():
+
+    messages = []
+    messages.append({
+        "role": "user",
+        "content": "I would like you to generate a description for a novel. Just return the description of the novel. Nothing else, please.",
+    })
+
+    client = Groq(
+        api_key=os.environ.get("GROQ_API_KEY"),
+    )
+    response = client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=messages
+    )
+
+    str_second_response = str(response.choices[0].message.content).replace('"', '\"')
+
+    return jsonify({
+        "props": {
+            "#project_description": {"value": str_second_response},
+        },
+        "js": ";autosize.update($('textarea.autosize'));"
+    })
+
+
 # Api Call and Tool Detection.
 def chat_completion(messages):
 
@@ -202,7 +444,7 @@ def chat_completion(messages):
     try:
         # Get the tools to use
         tools = get_tools()
-        tools = []
+        # tools = []
 
         completion = client.chat.completions.create(
             messages=messages,
@@ -248,6 +490,9 @@ def chat_completion(messages):
 
             print_debug_line("-- DEBUG: available_functions: ", "cyan")
 
+            print_debug_line(f" -- response_message: { response_message }", "yellow")
+            print_debug_line(f" -- response_message.content: { response_message.content }", "yellow")
+
             messages.append(response_message)
             
             print_debug_line(f"-- DEBUG: messages: { messages }", "cyan")
@@ -255,54 +500,43 @@ def chat_completion(messages):
             # Process each tool call
             for tool_call in tool_calls:
 
-                print("-- DEBUG: tool_call: ", tool_call)
-                print("-- DEBUG: tool_call.id: ", tool_call.id)
+                
+                print_debug_line(f"-- DEBUG: tool_call: { tool_call }", "green")
+                print_debug_line(f"-- DEBUG: tool_call.id: { tool_call.id }", "yellow")
 
                 function_name = tool_call.function.name
-                print("-- DEBUG: function_name: ", function_name)
+                print_debug_line(f"-- DEBUG: function_name: { function_name }", "white")
 
                 function_to_call = available_functions[function_name]
-                print("-- DEBUG: function_to_call: ", function_to_call)
+                print_debug_line(f"-- DEBUG: function_to_call: { function_to_call }", "cyan")
 
                 function_args = json.loads(tool_call.function.arguments)
-                print("-- DEBUG: function_args: ", function_args)
+                print_debug_line(f"-- DEBUG: function_args: { function_args }", "green")
                 
                 # Call the tool and get the response
                 if function_args:
                     function_response = function_to_call(**function_args)
                 else:
                     function_response = function_to_call()
-                print("-- DEBUG: function_response: ", function_response)
-
-
-                # Check if the response is a Flask Response object
-                if isinstance(function_response, Response):
-                    response_data = function_response.get_data(as_text=True)
-                    json_result = jsonify(response_data)
-                    print("-- DEBUG: JSON Result: ", json_result)
-                else:
-                    print("-- DEBUG: Unexpected response type: ", function_response)
-                    json_result = function_response
-                
-                func_response_text = jsonify(json_result)
-
-                print("-- DEBUG: func_response_text: ", func_response_text)
+                print_debug_line(f"-- DEBUG: function_response: { function_response }", "blue")
 
                 # Add the tool response to the conversation
 
-                init_sys_msg = get_initial_system_message()['content']
+                # init_sys_msg = get_initial_system_message()['content']
 
+                # Do not put comments inside the messages array. It will break!
+                tool_content = f"The user requested something. The system replied with: { function_response }. Do not mention the system. This is your internal thought. Let the user know what the system said as if it was your own words. The user knows that this is happening as he programmed you to do this."
                 messages.append({
                     "tool_call_id": tool_call.id, 
-                    "role": "tool", # Indicates this message is from tool use
+                    "role": "tool", 
                     "name": function_name,
-                    "content": f"""{ init_sys_msg }\n\n{ func_response_text }.""",
+                    "content": tool_content,
                 })
 
-                print_debug_line(f" -- The function response text is: { func_response_text }.", "yellow")
+                print_debug_line(f" -- The function response text is: { function_response }.", "yellow")
 
-                return func_response_text
-                exit(0)
+                # return func_response_text
+                # exit(0)
 
                 # Make a second API call with the updated conversation
                 second_response = client.chat.completions.create(
@@ -313,13 +547,14 @@ def chat_completion(messages):
                 str_second_response = str(second_response.choices[0].message.content)
 
 
-                #if str(function_name).strip() != "summarize_conversation":
+                if str(function_name).strip() != "summarize_conversation":
                     
-                sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content, msg_tool_name, msg_sentiment_score)
-                    VALUES (0, 'tool', %s, %s, 0);""", (str_second_response, function_name, ))
+                    sql("""INSERT INTO groq_messages (conv_id, msg_role, msg_content, msg_tool_name, msg_sentiment_score) VALUES (0, 'tool', %s, %s, 0);""", (tool_content, function_name, ))
 
-                # Return the final response
-                return second_response.choices[0].message.content
+                    # Return the final response
+                    return second_response.choices[0].message.content
+                else:
+                    return False
 
         else:
             print("-- DEBUG: Not a tool call.")

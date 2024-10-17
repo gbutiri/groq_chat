@@ -121,6 +121,24 @@ def add_tool_parameter(tool_id):
     })
 
 
+@tool_bp.route("/remove-tool-parameter/<tool_param_id>", methods=["POST"])
+def remove_tool_parameter(tool_param_id):
+
+    tool_param = sql("""SELECT * FROM groq_tool_parameters WHERE tool_param_id = %s;""", (tool_param_id, ))
+
+    sql("""DELETE FROM groq_tool_parameters WHERE tool_param_id = %s;""", (tool_param_id, ))
+
+    all_tool_params = sql("""SELECT * FROM groq_tool_parameters WHERE tool_id = %s;""", (tool_param[0]['tool_id'], ))
+
+    html_out = render_template("tool_param_list.html", tool_params=all_tool_params)
+
+    return jsonify({
+        "htmls": {
+            "#tool_parameter": html_out,
+        },
+    })
+
+
 @tool_bp.route("/add-groq-tool", methods=["POST"])
 def add_groq_tool():
     tool_name = request.form["tool_name"]

@@ -1,0 +1,9 @@
+<h3>Project Details</h3>
+{% for project in projects %}
+    <div class="border border-3 border-warning-subtle rounded-3 p-2 mb-2">
+        <h4>{{ project['proj_title'] }}</h4>
+        
+        <a href="#" class="tmbtn" data-module="inky" data-action="edit-project/{{ project['proj_id'] }}">edit</a>
+        <a href="#" class="tmbtn" data-module="inky" data-action="delete-project/{{ project['proj_id'] }}">delete</a>
+    </div>
+{% endfor %}

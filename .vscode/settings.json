@@ -76,11 +76,19 @@
         },
         "ajaxform": {
             "description": "Class for handling AJAX form submissions",
-            "usage": "Include '/static/dispatch.js' for AJAX functionality"
+            "usage": "Include '/static/dispatch.js' for AJAX functionality",
+            "additional_attributes": [
+                {"data-module": "Used for the first part of the URL, usually a controller name"},
+                {"data-action": "Used for the second part of the URL, usually a method name and / or parameters."}
+            ]
         },
         "tmbtn": {
-            "description": "Class for handling AJAX form submissions",
-            "usage": "Include '/static/dispatch.js' for AJAX functionality"
+            "description": "Class for handling AJAX link/button clicks",
+            "usage": "Include '/static/dispatch.js' for AJAX functionality",
+            "additional_attributes": [
+                {"data-module": "Used for the first part of the URL, usually a controller name"},
+                {"data-action": "Used for the second part of the URL, usually a method name and / or parameters."}
+            ]
         },
     }
 }

@@ -183,3 +183,7 @@ def get_system_status():
 
     # Word this in English for the user. Inlucde percetages as well as byte values (MB/GB)
     return f"The system is currently using {cpu_usage}% of the CPU. The memory usage is {memory_info.percent}%. The disk usage is {disk_usage.percent}%. The system has { round(memory_info.total / 1024 / 1024, 2) } MB of memory and { round(disk_usage.total / 1024 / 1024 / 1024, 2) } GB of disk space."
+
+
+def record_a_user_like():
+    return "The user likes this function."

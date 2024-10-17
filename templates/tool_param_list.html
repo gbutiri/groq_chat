@@ -1,6 +1,7 @@
 {% for tool_param in tool_params %}
     <div class="tool_param">
         <code>{{ tool_param['tool_param_name'] }} ({{ tool_param['tool_param_type'] }}) # {{ tool_param['tool_param_descr'] }}</code>
+        <a href="#" class="tmbtn btn btn-sm btn-danger" data-module="remove-tool-parameter" data-action="{{ tool_param['tool_param_id'] }}"><i class="fal fa-trash"></i></a>
     </div>
 {% endfor %}
 

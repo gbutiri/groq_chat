@@ -1,0 +1,5 @@
+<div id ="project_types">
+    {% for p_type in project_types %}
+    <a href="#" data-module="inky" data-action="create-new-project/{{ p_type['proj_type_id'] }}" class="bg-success-subtle d-block border border-3 rounded-3 border-primary mb-1 px-2 tmbtn">{{ p_type['proj_type_name'] }}</a>
+    {% endfor %}
+</div>
