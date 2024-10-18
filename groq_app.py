@@ -296,7 +296,7 @@ def inky_create_project_description():
     messages = []
     messages.append({
         "role": "user",
-        "content": f"""I would like to create a new novel. The title is "{ project_title }". The genre is "{ project_genre }". Gereate a new summary for this novel. Do not include the title or genre in the description. Simply return the description of the novel.""",
+        "content": f"""I would like to create a new novel. The title is "{ project_title }". The genre is "{ project_genre }". Gereate a new summary / plotline for this novel. Do not include the title or genre in the description. Simply return the summary, or plotline.""",
     })
 
     # Then we call the API with this data.
@@ -326,21 +326,17 @@ def inky_create_project_description():
 @app.route("/inky/create-project-idea", methods=["POST"])
 def inky_create_project_idea():
 
-    # Let's get the form data first.
-    project_title = request.form.get("project_title")
+    # Let's check for errors first.
     errors = {}
-
+    project_title = request.form.get("project_title")
     if not project_title:
         errors["#err_project_title"] = "Please enter a project title."
         
-
     project_genre = request.form.get("project_genre")
-
     if not project_genre:
         errors["#err_project_genre"] = "Please select a project genre."
     
     project_descr = request.form.get("project_descr")
-
     if not project_descr:
         errors["#err_project_descr"] = "Please enter a project description."
 
@@ -349,13 +345,45 @@ def inky_create_project_idea():
             "htmls": errors
         })
     
-
     # Now we generate a message list:
+
+    # This will be a muilti step process.
+
+    # 1. Plot Overview
+    # 2. Chapter Summaries
+    # 3. Character Profiles
+    # 4. Setting Details
+    # 5. Themes & Symbols
+    # 6. Continuity Notes
+    # 7. Foreshadowing & Hooks
+    # 8. World Specs
+    # 9. Tech Specs / Magic Systems
+
+    print_debug_line(f" -- The project title is: { project_title }.", "blue")
+
     messages = []
     messages.append({
         "role": "user",
-        "content": f"""I would like to create a new novel. The title is "{ project_title }". The genre is "{ project_genre }". The description is { project_descr }. Gereate a new book bible for this book. Contain all of the necessary elements of a book bible for this novel. Only return the book bible information. Do not include the title, genre, or description in the book bible. Properly format the bible's output using the correct elements.""",
-    })
+        "content": f"""I would like to create a new novel. The title is "{ project_title }". The genre is "{ project_genre }".\n\n
+The description is:
+{ project_descr }
+
+
+We are going to gereate a new book bible for this book. This will contain all of the necessary elements of a book bible for this novel. Do not include the title, genre, or description. Properly format the bible's output using the correct elements.
+
+From the following steps:
+1. Plot Overview
+2. Chapter Summaries
+3. Character Profiles
+4. Setting Details
+5. Themes & Symbols
+6. Continuity Notes
+7. Foreshadowing & Hooks
+8. World Specs
+9. Tech Specs / Magic Systems
+
+We will start with the plot overview. Please return the plot overview for this novel, only.""",
+        })  
 
     # Then we call the API with this data.
     client = Groq(
@@ -366,24 +394,92 @@ def inky_create_project_idea():
         messages=messages
     )
 
-    str_second_response = str(response.choices[0].message.content)
+    str_second_response = str(response.choices[0].message.content).replace("\n", "<br />")
 
+    print_debug_line(f" -- The response is: { str_second_response }.", "yellow")
+
+    next_url = '/inky/create-project-chapter-summaries'
+
+    print_debug_line(f" -- The next URL is: { next_url }.", "green")
 
     # Then we output the response.
     return jsonify({
+        "js": ";call_url_for_ajax(1, 9, '" + next_url + "');",
         "htmls": {
             "#project_idea_output": str_second_response,
+            "#loading-bar-text": "Plot Overview",
         }
     })
+
+
+@app.route("/inky/create-project-chapter-summaries", methods=["POST"])
+def inky_create_project_chapter_summaries():
+    
+    print_debug_line(f" -- Testing the chapter summaries.", "purple")
+    # Wait one second for testing;
+    time.sleep(2)
+
+    # Sample return
+    return jsonify({
+        "js": ";call_url_for_ajax(2, 9, '/inky/create-project-character-profiles');",
+        "htmls": {
+            "#loading-bar-text": "Chapter Summaries",
+        }
+    })
+
+
+@app.route("/inky/create-project-character-profiles", methods=["POST"])
+def inky_create_project_character_profiles():
+
+    print_debug_line(f" -- Testing the charater profiles.", "purple")
+    # Wait one second for testing;
+    time.sleep(2)
+
+    # Sample return
+    return jsonify({
+        "js": ";call_url_for_ajax(3, 9, '/inky/create-project-setting-details');",
+        "htmls": {
+            "#loading-bar-text": "Character Profiles",
+        }
+    })
+
+
+@app.route("/inky/create-project-setting-details", methods=["POST"])
+def inky_create_project_setting_details():
+
+    print_debug_line(f" -- Testing the setting details.", "purple")
+    # Wait one second for testing;
+    time.sleep(2)
+
+    # Sample return
+    return jsonify({
+        "js": ";call_url_for_ajax(4, 9, '/inky/create-project-themes-symbols');",
+        "htmls": {
+            "#loading-bar-text": "Setting Details",
+        }
+    })
+
+
+
+
+
 
 
 @app.route("/inky/generate_novel_title", methods=["POST"])
 def generate_novel_title():
 
+    project_genre = request.form.get("project_genre")
+    if not project_genre:
+        return jsonify({
+            "htmls": {
+                "#err_project_genre": "Please select a project genre.",
+            }
+        })
+
     messages = []
     messages.append({
         "role": "user",
-        "content": "I would like you to generate just a title for a novel of a radom genre. Just return the title of the novel. Nothing else, please.",
+        "content": f"""I would like you to generate just a title for a "{ project_genre }" novel. Just return the title of the novel. Nothing else, please.""",
     })
 
     client = Groq(
@@ -394,12 +490,16 @@ def generate_novel_title():
         messages=messages
     )
 
+
     str_second_response = str(response.choices[0].message.content)
+    str_response_clean = str_second_response.replace('"', '')
 
     return jsonify({
         "values": {
-            "#project_title": str_second_response,
-            "#project_title_2": str_second_response,
+            "#project_title": str_response_clean,
+            "#project_title_2": str_response_clean,
+            "#project_genre_2": project_genre,
+            "#project_genre_3": project_genre,
         }
     })
 
@@ -407,10 +507,12 @@ def generate_novel_title():
 @app.route("/inky/generate_novel_description", methods=["POST"])
 def generate_novel_description():
 
+
+
     messages = []
     messages.append({
         "role": "user",
-        "content": "I would like you to generate a description for a novel. Just return the description of the novel. Nothing else, please.",
+        "content": "I would like you to generate a summary or plot line for a novel. Just return the description of the novel. Nothing else, please.",
     })
 
     client = Groq(

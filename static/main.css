@@ -91,3 +91,7 @@ textarea.autosize {
     transition: height 0.2s ease-in-out; /* Smooth transition for height changes */
     overflow: hidden; /* Hide scrollbars for a cleaner animation */
 }
+
+.loading-bar-fill {
+    width: 0%;
+}

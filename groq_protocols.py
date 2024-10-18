@@ -2,6 +2,8 @@ import os
 import psutil
 from flask import jsonify, render_template_string
 from groq_system_functs import *
+from groq_db_functs import *
+from textblob import TextBlob
 
 
 def get_function_names_from_file(file_path):
@@ -185,5 +187,14 @@ def get_system_status():
     return f"The system is currently using {cpu_usage}% of the CPU. The memory usage is {memory_info.percent}%. The disk usage is {disk_usage.percent}%. The system has { round(memory_info.total / 1024 / 1024, 2) } MB of memory and { round(disk_usage.total / 1024 / 1024 / 1024, 2) } GB of disk space."
 
 
-def record_a_user_like():
-    return "The user likes this function."
+def record_a_user_like(the_user_like):
+
+    print_debug_line(f" -- Recording a user like: {the_user_like}.", "purple")
+
+    # Perform sentiment analysis on the user like
+    sentiment = TextBlob(the_user_like).sentiment.polarity
+
+    # Save the user like to the database
+    sql("""INSERT INTO groq_user_sentiment (sent_user, sent_subject, sent_score) VALUES ('user', %s, %s);""", (the_user_like, sentiment, ))
+
+    return the_user_like

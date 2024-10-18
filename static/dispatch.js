@@ -141,6 +141,7 @@ function postAjax(d) {
 	}
 	if (typeof(d.js) !== 'undefined') {
 		try {
+			console.log(d.js);
 			eval(d.js);
 		} catch (e) {}
 	}
